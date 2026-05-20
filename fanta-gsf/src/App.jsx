@@ -97,8 +97,8 @@ export default function App() {
 
   // Stato del Salvataggio DB
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  // Messaggio di feedback post-submit: { type: 'success' | 'error', text: '...' } oppure null
+  const [submitMessage, setSubmitMessage] = useState(null);
 
   // Dati Supabase (solo giudici e squadre — i giochi sono nel calendario statico)
   const [giudiciDb, setGiudiciDb] = useState([]);
@@ -174,28 +174,52 @@ export default function App() {
     s => String(s.id_squadra) === String(selectedSquadra)
   );
 
-  // --- FUNZIONE DI SUBMIT: logga il payload e salva ---
-  // Il payload contiene SOLO la squadra selezionata e le scommesse (i giochi sono read-only)
-  const handleFinalSubmit = () => {
-    const payload = {
-      // Dati Step 1 — Squadra selezionata
-      id_squadra: selectedSquadra,
-      // Dati Step 3 — Scommesse Bonus/Malus predefiniti abbinati ai giudici
-      scommesse: scommesse.map(s => ({
+  // Shortcut: il salvataggio è andato a buon fine?
+  const submitSuccess = submitMessage?.type === 'success';
+
+  // --- FUNZIONE DI SUBMIT FINALE ---
+  // Scrive le scommesse sulla tabella `scommesse_del_capitano` di Supabase
+  const handleFinalSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitMessage(null);
+
+    try {
+      // Prepara il payload: una riga per ogni scommessa abbinata alla squadra
+      const payloadArray = scommesse.map(s => ({
+        squadra_id: selectedSquadra,
         giudice_id: s.giudice_id,
-        id_bonus: s.id_bonus,
-        azione: s.azione,
+        azione_scelta: s.azione,
         punti: s.punti,
-      })),
-      // Metadati
-      timestamp: new Date().toISOString(),
-    };
+      }));
 
-    console.log('PAYLOAD PRONTO PER SUPABASE:', payload);
-    // TODO: collegare al salvataggio effettivo su Supabase
+      console.log('PAYLOAD PER SUPABASE:', payloadArray);
+
+      // Insert multipla su Supabase
+      const { data, error } = await supabase
+        .from('scommesse_del_capitano')
+        .insert(payloadArray)
+        .select(); // Per ottenere eventuali errori di validazione
+
+        console.log('RISPOSTA SUPABASE:', { data, error });
+
+      if (error) throw error;
+
+      // Successo!
+      setSubmitMessage({
+        type: 'success',
+        text: 'Scommesse salvate con successo! Squadra iscritta al Fanta GSF.',
+      });
+      setStepAttuale(5);
+    } catch (err) {
+      console.error('Errore salvataggio su Supabase:', err);
+      setSubmitMessage({
+        type: 'error',
+        text: err.message || 'Errore durante il salvataggio. Riprova.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
-
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-yellow-200">
@@ -218,8 +242,8 @@ export default function App() {
           {[1, 2, 3, 4, 5].map((num) => (
             <React.Fragment key={num}>
               <button
-                onClick={() => !submitSuccess && setStepAttuale(num)}
-                disabled={submitSuccess && num !== 5}
+                onClick={() => !submitSuccess && !isSubmitting && setStepAttuale(num)}
+                disabled={(submitSuccess && num !== 5) || isSubmitting}
                 className={`
                   relative flex items-center justify-center w-12 h-12 rounded-full font-black text-lg transition-all shrink-0
                   ${stepAttuale === num
@@ -448,20 +472,20 @@ export default function App() {
                   <h3 className="font-black text-2xl text-gray-800 uppercase tracking-tight">Tutto pronto!</h3>
                   <p className="text-gray-500 mt-2 max-w-xs">Controlla l'anteprima sulla destra. Se sei soddisfatto della tua squadra, conferma per salvare e iscriverti.</p>
                   
-                  <button onClick={() => setStepAttuale(3)} className="mt-8 text-sm text-blue-500 font-bold hover:underline">
+                  <button onClick={() => setStepAttuale(3)} disabled={isSubmitting} className="mt-8 text-sm text-blue-500 font-bold hover:underline disabled:opacity-50">
                     &larr; Torna indietro a modificare
                   </button>
                 </div>
               )}
 
               {submitSuccess && (
-                 <div className="flex flex-col items-center justify-center h-full text-center animate-in zoom-in">
+                <div className="flex flex-col items-center justify-center h-full text-center animate-in zoom-in">
                   <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
                     <CheckCircle2 size={48} />
                   </div>
                   <h3 className="font-black text-3xl text-gray-800 uppercase tracking-tight">Squadra iscritta!</h3>
                   <p className="text-gray-500 mt-3 font-medium">In bocca al lupo per i GSF Summer!</p>
-               </div>
+                </div>
               )}
 
             </div>
@@ -533,7 +557,16 @@ export default function App() {
                 </div>
 
                 <div className="mt-4 shrink-0 pt-4 border-t border-gray-100 bg-white relative z-10">
-                  {submitError && <p className="text-red-500 text-sm font-bold text-center mb-2">{submitError}</p>}
+                  {/* Banner di feedback: verde successo, rosso errore */}
+                  {submitMessage && (
+                    <div className={`mb-3 px-4 py-3 rounded-xl text-sm font-bold text-center border ${
+                      submitMessage.type === 'success'
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
+                      {submitMessage.text}
+                    </div>
+                  )}
                   
                   <button
                     onClick={handleFinalSubmit}
@@ -548,7 +581,7 @@ export default function App() {
                     `}
                   >
                     {isSubmitting ? (
-                      <><Loader2 className="animate-spin" size={24} /> SALVATAGGIO...</>
+                      <><Loader2 className="animate-spin" size={24} /> SALVATAGGIO IN CORSO...</>
                     ) : submitSuccess ? (
                       <><CheckCircle2 size={24} /> SQUADRA SALVATA!</>
                     ) : (
