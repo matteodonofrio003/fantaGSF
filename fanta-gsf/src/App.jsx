@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import {
   Trophy,
-  Users,
-  Zap,
   ChevronRight,
   CheckCircle2,
-  Plus,
-  Minus,
   Settings,
-  Info,
   Loader2,
-  Trash2
+  Trash2,
+  Calendar,
+  Star
 } from 'lucide-react';
 
 // --- COMPONENTE LOGO RICREATO ---
@@ -40,71 +37,99 @@ const LogoGSF = () => {
   );
 };
 
+// --- CALENDARIO SERATE (hardcoded — in futuro verrà dal backend Admin) ---
+// Struttura read-only: il capitano vede i giochi programmati per ogni serata
+const calendarioSerate = [
+  {
+    serata: 1,
+    titolo: 'Serata 1 — Opening Night',
+    emoji: '🎬',
+    giochi: ['Sorteggio tema', 'Tiro al segno', 'Tiro alla fune', 'I tre mattoni', 'Swap'],
+  },
+  {
+    serata: 2,
+    titolo: 'Serata 2 — La Sfida',
+    emoji: '🎯',
+    giochi: ['Torta in faccia', 'Palloncino express', 'La befana'],
+  },
+  {
+    serata: 3,
+    titolo: 'Serata 3 — Acqua & Fuoco',
+    emoji: '💦',
+    giochi: ['Gemelli siamesi', 'La posa', 'Gavettoni', 'La spugna'],
+  },
+  {
+    serata: 4,
+    titolo: 'Serata 4 — Brain Games',
+    emoji: '🧠',
+    giochi: ['Frase annacquata', 'Indovina il motivo', 'Mangia anguria'],
+  },
+  {
+    serata: 5,
+    titolo: 'Serata 5 — Gran Finale',
+    emoji: '🏆',
+    giochi: ['Caccia al tesoro', 'Fatti capire', 'La rapina', 'Sfilata/Scenografia'],
+  },
+];
+
+// --- BONUS / MALUS PREDEFINITI (hardcoded — TODO: in futuro fetch da Supabase tabella `bonus_malus`) ---
+// La regia definisce queste regole, il capitano le abbina a un giudice
+const bonusMalusPredefiniti = [
+  { id: 1, desc: 'Si tuffa in piscina vestito', punti: 15 },
+  { id: 2, desc: 'Sbaglia a fischiare l\'inizio del gioco', punti: -10 },
+  { id: 3, desc: 'Balla durante una pausa', punti: 5 },
+  { id: 4, desc: 'Si presenta con un costume assurdo', punti: 10 },
+  { id: 5, desc: 'Dimentica le regole e si confonde', punti: -5 },
+  { id: 6, desc: 'Urla il nome della propria squadra del cuore', punti: 8 },
+];
+
+// Colori per le card delle serate nella timeline
+const serataColors = [
+  'from-rose-500 to-orange-500',
+  'from-amber-500 to-yellow-500',
+  'from-cyan-500 to-blue-500',
+  'from-violet-500 to-purple-500',
+  'from-emerald-500 to-teal-500',
+];
+
 export default function App() {
   const [stepAttuale, setStepAttuale] = useState(1);
-  const [budget, setBudget] = useState(100);
 
   // Stato del Salvataggio DB
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  // Dati Supabase
-  const [giochiDb, setGiochiDb] = useState([]);
+  // Dati Supabase (solo giudici e squadre — i giochi sono nel calendario statico)
   const [giudiciDb, setGiudiciDb] = useState([]);
-  const [squadreDisponibili, setSquadreDisponibili] = useState([]); // Squadre pre-inserite dal DB
+  const [squadreDisponibili, setSquadreDisponibili] = useState([]);
   const [isLoadingDb, setIsLoadingDb] = useState(true);
 
   // Stato Step 1 — ID della squadra selezionata dalla tendina
   const [selectedSquadra, setSelectedSquadra] = useState('');
 
-  // Stato principale della squadra con i dati raccolti nei vari step
-  const [squadra, setSquadra] = useState({
-    giochiSelezionati: [],
-    scommesse: []
-  });
+  // Stato principale: solo le scommesse (i giochi non si selezionano più)
+  const [scommesse, setScommesse] = useState([]);
 
-  // Stato locale form Scommessa (nuovo schema: azione generica + punti bonus/malus)
+  // Stato locale form Scommessa Step 3 — giudice + bonus/malus predefinito
   const [nuovaScommessa, setNuovaScommessa] = useState({
     id_giudice: '',
-    azione: '',
-    punti: 0
+    id_bonus: '',   // ID del bonus/malus predefinito selezionato
   });
 
-  // Fetch dei dati all'avvio: giochi, giudici e squadre pre-inserite
+  // Fetch dei dati all'avvio: solo giudici e squadre (i giochi sono nel calendario statico)
   useEffect(() => {
     const fetchData = async () => {
       setIsLoadingDb(true);
       try {
-        // Fetch parallelo di tutte le tabelle necessarie
-        const [resGiochi, resGiudici, resSquadre] = await Promise.all([
-          supabase.from('giochi').select('*').eq('attivo', true),
+        const [resGiudici, resSquadre] = await Promise.all([
           supabase.from('giudici').select('*'),
           supabase.from('squadre').select('*'),
         ]);
 
-        if (resGiochi.error) throw resGiochi.error;
         if (resGiudici.error) throw resGiudici.error;
         if (resSquadre.error) throw resSquadre.error;
 
-        // Proprietà visuali per le card dei giochi
-        const visualProps = [
-          { icon: <Users size={20} />, colore: 'bg-red-100 text-red-600 border-red-300' },
-          { icon: <Trophy size={20} />, colore: 'bg-orange-100 text-orange-600 border-orange-300' },
-          { icon: <Zap size={20} />, colore: 'bg-blue-100 text-blue-600 border-blue-300' },
-          { icon: <Trophy size={20} />, colore: 'bg-purple-100 text-purple-600 border-purple-300' },
-        ];
-
-        const mappedGiochi = (resGiochi.data || []).map((g, i) => ({
-          ...g,
-          id: g.id_gioco,
-          nome: g.nome,
-          costo: g.costo_partecipazione_fp,
-          icon: visualProps[i % visualProps.length].icon,
-          colore: visualProps[i % visualProps.length].colore
-        }));
-
-        setGiochiDb(mappedGiochi);
         setGiudiciDb(resGiudici.data || []);
         setSquadreDisponibili(resSquadre.data || []);
       } catch (err) {
@@ -116,157 +141,61 @@ export default function App() {
     fetchData();
   }, []);
 
-  const toggleGioco = (gioco) => {
-    const giaSelezionato = squadra.giochiSelezionati.find(g => g.id === gioco.id);
-    if (giaSelezionato) {
-      setSquadra({ 
-        ...squadra, 
-        giochiSelezionati: squadra.giochiSelezionati.filter(g => g.id !== gioco.id),
-      });
-      setBudget(b => b + gioco.costo);
-    } else {
-      if (budget >= gioco.costo) {
-        setSquadra({ ...squadra, giochiSelezionati: [...squadra.giochiSelezionati, gioco] });
-        setBudget(b => b - gioco.costo);
-      } else {
-        alert("Budget FantaPunti esaurito!");
-      }
-    }
-  };
-
-  // Aggiunge una scommessa generica (Bonus/Malus) con giudice, azione e punti
+  // Aggiunge una scommessa abbinando un giudice a un bonus/malus predefinito
   const aggiungiScommessa = () => {
-    if (!nuovaScommessa.id_giudice || !nuovaScommessa.azione || nuovaScommessa.punti === '') return;
-    
+    if (!nuovaScommessa.id_giudice || !nuovaScommessa.id_bonus) return;
+
     const giudice = giudiciDb.find(g => g.id_giudice === nuovaScommessa.id_giudice);
+    // Lookup del bonus/malus predefinito selezionato
+    const bonusScelto = bonusMalusPredefiniti.find(b => b.id === Number(nuovaScommessa.id_bonus));
+    if (!bonusScelto) return;
 
     const scommessaCompleta = {
-      id: Date.now().toString(), // ID locale temporaneo
+      id: Date.now().toString(),       // ID locale temporaneo
       giudice_id: nuovaScommessa.id_giudice,
-      azione: nuovaScommessa.azione,
-      punti: Number(nuovaScommessa.punti),
-      nomeGiudice: giudice?.nome // per la UI
+      id_bonus: bonusScelto.id,        // Riferimento al predefinito
+      azione: bonusScelto.desc,        // Testo leggibile dell'azione
+      punti: bonusScelto.punti,        // Punti bonus (+) o malus (-)
+      nomeGiudice: giudice?.nome,      // Per la UI
     };
 
-    setSquadra({
-      ...squadra,
-      scommesse: [...squadra.scommesse, scommessaCompleta]
-    });
+    setScommesse(prev => [...prev, scommessaCompleta]);
 
     // Reset del form
-    setNuovaScommessa({
-      id_giudice: '',
-      azione: '',
-      punti: 0
-    });
+    setNuovaScommessa({ id_giudice: '', id_bonus: '' });
   };
 
   const rimuoviScommessa = (idScommessa) => {
-    setSquadra({
-      ...squadra,
-      scommesse: squadra.scommesse.filter(s => s.id !== idScommessa)
-    });
+    setScommesse(prev => prev.filter(s => s.id !== idScommessa));
   };
 
-  // --- FUNZIONE DI DEBUG: logga il payload completo prima di salvare su Supabase ---
-  // Raccoglie tutti i dati dai 3 step: squadra, giochi selezionati e scommesse
   // Ricava l'oggetto completo della squadra selezionata per l'anteprima
-  const squadraSelezionataObj = squadreDisponibili.find(s => String(s.id_squadra) === String(selectedSquadra));
+  const squadraSelezionataObj = squadreDisponibili.find(
+    s => String(s.id_squadra) === String(selectedSquadra)
+  );
 
+  // --- FUNZIONE DI SUBMIT: logga il payload e salva ---
+  // Il payload contiene SOLO la squadra selezionata e le scommesse (i giochi sono read-only)
   const handleFinalSubmit = () => {
     const payload = {
-      // Dati Step 1 — ID della squadra pre-inserita selezionata
+      // Dati Step 1 — Squadra selezionata
       id_squadra: selectedSquadra,
-      // Dati Step 2 — Giochi acquistati con il budget
-      giochiSelezionati: squadra.giochiSelezionati.map(g => ({
-        id: g.id,
-        nome: g.nome,
-        costo: g.costo,
-      })),
-      // Dati Step 3 — Scommesse generiche Bonus/Malus sui giudici
-      scommesse: squadra.scommesse.map(s => ({
+      // Dati Step 3 — Scommesse Bonus/Malus predefiniti abbinati ai giudici
+      scommesse: scommesse.map(s => ({
         giudice_id: s.giudice_id,
-        nomeGiudice: s.nomeGiudice,
+        id_bonus: s.id_bonus,
         azione: s.azione,
         punti: s.punti,
       })),
       // Metadati
-      budgetResiduo: budget,
       timestamp: new Date().toISOString(),
     };
 
     console.log('PAYLOAD PRONTO PER SUPABASE:', payload);
-    // Una volta verificato il payload, si procede con il salvataggio effettivo
-    salvaSquadraSuSupabase();
+    // TODO: collegare al salvataggio effettivo su Supabase
   };
 
-  const salvaSquadraSuSupabase = async () => {
-    setIsSubmitting(true);
-    setSubmitError('');
-    
-    try {
-      // 1. Inserisci Squadra (colore random per la grafica)
-      const coloriMock = ['#ef4444', '#3b82f6', '#eab308', '#22c55e', '#a855f7'];
-      const coloreScelto = coloriMock[Math.floor(Math.random() * coloriMock.length)];
-      
-      const { data: squadraInserita, error: errSquadra } = await supabase
-        .from('squadre')
-        .insert({
-          nome: squadra.nome,
-          capitano: 'Capitano1',
-          colore: coloreScelto,
-          budget_iniziale_fp: 100
-        })
-        .select()
-        .single();
 
-      if (errSquadra) throw errSquadra;
-      const idSquadraGenerato = squadraInserita.id_squadra;
-
-      // 2. Inserisci Partecipazioni
-      if (squadra.giochiSelezionati.length > 0) {
-        const recordPartecipazioni = squadra.giochiSelezionati.map(g => ({
-          id_squadra: idSquadraGenerato,
-          id_gioco: g.id,
-          costo_pagato_fp: g.costo
-        }));
-
-        const { data: partInserite, error: errPart } = await supabase
-          .from('partecipazioni')
-          .insert(recordPartecipazioni)
-          .select();
-
-        if (errPart) throw errPart;
-
-        // 3. Inserisci Scommesse
-        if (squadra.scommesse.length > 0) {
-          const recordScommesse = squadra.scommesse.map(s => {
-            const partecipazione = partInserite.find(p => p.id_gioco === s.id_gioco);
-            return {
-              id_partecipazione: partecipazione.id_partecipazione,
-              id_giudice: s.id_giudice,
-              azione_predetta: s.azione_predetta,
-              bonus_potenziale_fp: s.bonus_potenziale_fp
-            };
-          });
-
-          const { error: errScom } = await supabase
-            .from('scommesse_del_capitano')
-            .insert(recordScommesse);
-
-          if (errScom) throw errScom;
-        }
-      }
-
-      setSubmitSuccess(true);
-      setStepAttuale(5);
-    } catch (err) {
-      console.error("Errore salvataggio:", err);
-      setSubmitError("Errore durante il salvataggio. Riprova.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-yellow-200">
@@ -278,11 +207,6 @@ export default function App() {
           <div className="flex flex-col border-l-2 border-gray-200 pl-4">
             <h1 className="text-3xl font-black tracking-tight text-blue-600 leading-none">FANTA</h1>
             <h2 className="text-xl font-bold text-slate-500 leading-none">GSF SUMMER</h2>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-full border border-blue-100">
-            <span className="font-bold text-blue-800 hidden md:inline">FantaPunti:</span>
-            <span className="font-black text-2xl text-blue-600">{budget}</span>
           </div>
         </div>
       </header>
@@ -375,67 +299,55 @@ export default function App() {
                 </div>
               )}
 
+              {/* === STEP 2 — Calendario Serate (read-only, nessuna interazione) === */}
               {stepAttuale === 2 && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-left-4 flex flex-col h-full">
                   <div className="shrink-0">
                     <h4 className="font-bold text-gray-700 flex items-center gap-2">
-                      <span className="bg-blue-100 text-blue-700 w-6 h-6 flex items-center justify-center rounded-full text-sm">1</span>
-                      Scelta Giochi
+                      <Calendar className="text-blue-500" size={20} />
+                      Calendario Serate
                     </h4>
-                    <p className="text-sm text-gray-500 mb-4">Scegli i giochi su cui puntare. Attento al costo in FantaPunti!</p>
+                    <p className="text-sm text-gray-500 mb-4">Ecco i giochi programmati per ogni serata. Solo visualizzazione.</p>
                   </div>
 
-                  {isLoadingDb ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-gray-400 flex-1">
-                      <Loader2 className="animate-spin mb-2 text-blue-500" size={32} />
-                      <p className="text-sm font-bold">Caricamento giochi...</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 flex-1 overflow-y-auto pr-2 pb-2">
-                      {giochiDb.map(gioco => {
-                        const isSelected = squadra.giochiSelezionati.find(g => g.id === gioco.id);
-                        return (
-                          <div
-                            key={gioco.id}
-                            onClick={() => toggleGioco(gioco)}
-                            className={`
-                              p-3 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between
-                              ${isSelected ? 'border-blue-500 bg-blue-50 shadow-md scale-[1.02]' : 'border-gray-100 bg-white hover:border-gray-300'}
-                            `}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${gioco.colore}`}>
-                                {gioco.icon}
-                              </div>
-                              <span className="font-bold text-gray-800">{gioco.nome}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-gray-400">{gioco.costo} pt</span>
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isSelected ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                                {isSelected ? <Minus size={14} /> : <Plus size={14} />}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                  
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-3 pb-2">
+                    {calendarioSerate.map((serata, idx) => (
+                      <div key={serata.serata} className="rounded-2xl border border-gray-200 overflow-hidden bg-white shadow-sm">
+                        {/* Header della serata con gradiente */}
+                        <div className={`bg-gradient-to-r ${serataColors[idx % serataColors.length]} px-4 py-2.5 flex items-center gap-2`}>
+                          <span className="text-lg">{serata.emoji}</span>
+                          <span className="text-white font-bold text-sm tracking-wide">{serata.titolo}</span>
+                        </div>
+                        {/* Lista giochi della serata */}
+                        <div className="p-3 flex flex-wrap gap-1.5">
+                          {serata.giochi.map((gioco, gi) => (
+                            <span
+                              key={gi}
+                              className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200"
+                            >
+                              {gioco}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <button onClick={() => setStepAttuale(3)} className="w-full shrink-0 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors mt-auto">
                     Prosegui alle Scommesse <ChevronRight size={18} />
                   </button>
                 </div>
               )}
 
-              {/* === STEP 3 — Scommesse generiche Bonus/Malus sui giudici === */}
+              {/* === STEP 3 — Scommesse con Bonus/Malus predefiniti dalla regia === */}
               {stepAttuale === 3 && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-left-4 flex flex-col h-full">
                   <div className="shrink-0">
                     <h4 className="font-bold text-gray-700 flex items-center gap-2">
-                      <span className="bg-yellow-100 text-yellow-700 w-6 h-6 flex items-center justify-center rounded-full text-sm">2</span>
+                      <Star className="text-yellow-500" size={20} />
                       Scommesse Bonus / Malus
                     </h4>
-                    <p className="text-sm text-gray-500 mb-4">Crea pronostici sui giudici: assegna punti positivi (bonus) o negativi (malus).</p>
+                    <p className="text-sm text-gray-500 mb-4">Abbina un giudice a un bonus o malus predefinito dalla regia.</p>
                   </div>
 
                   {isLoadingDb ? (
@@ -446,7 +358,7 @@ export default function App() {
                   ) : (
                     <>
                       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3 shrink-0">
-                        {/* Select del Giudice */}
+                        {/* Select del Giudice (da Supabase) */}
                         <div>
                           <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Giudice</label>
                           <select
@@ -461,34 +373,26 @@ export default function App() {
                           </select>
                         </div>
 
-                        {/* Input Azione Bonus/Malus */}
+                        {/* Select Bonus/Malus predefinito — TODO: in futuro fetch da Supabase tabella `bonus_malus` */}
                         <div>
-                          <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Azione Bonus/Malus</label>
-                          <input
-                            type="text"
-                            placeholder="Es: Si tuffa vestito, Cade dalla sedia..."
-                            value={nuovaScommessa.azione}
-                            onChange={e => setNuovaScommessa({...nuovaScommessa, azione: e.target.value})}
+                          <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Bonus / Malus</label>
+                          <select
+                            value={nuovaScommessa.id_bonus}
+                            onChange={e => setNuovaScommessa({...nuovaScommessa, id_bonus: e.target.value})}
                             className="w-full p-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                          />
-                        </div>
-
-                        {/* Input Punti (Bonus positivo / Malus negativo) */}
-                        <div>
-                          <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Punti (Bonus/Malus)</label>
-                          <input
-                            type="number"
-                            placeholder="Es: 5, -3, 10"
-                            value={nuovaScommessa.punti}
-                            onChange={e => setNuovaScommessa({...nuovaScommessa, punti: e.target.value})}
-                            className="w-full p-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                          />
-                          <p className="text-xs text-gray-400 mt-1">Positivo = bonus, negativo = malus</p>
+                          >
+                            <option value="">-- Scegli un bonus/malus --</option>
+                            {bonusMalusPredefiniti.map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.desc} ({b.punti > 0 ? '+' : ''}{b.punti} pt)
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <button
                           onClick={aggiungiScommessa}
-                          disabled={!nuovaScommessa.id_giudice || !nuovaScommessa.azione || nuovaScommessa.punti === ''}
+                          disabled={!nuovaScommessa.id_giudice || !nuovaScommessa.id_bonus}
                           className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
                         >
                           Aggiungi Scommessa
@@ -497,21 +401,21 @@ export default function App() {
 
                       {/* Lista scommesse aggiunte */}
                       <div className="flex-1 overflow-y-auto pr-2 mt-2">
-                        {squadra.scommesse.length > 0 && (
+                        {scommesse.length > 0 && (
                           <div className="space-y-2 pb-2">
                             <h5 className="font-bold text-xs uppercase text-gray-500 mt-2">Le tue scommesse:</h5>
-                            {squadra.scommesse.map(s => (
+                            {scommesse.map(s => (
                               <div key={s.id} className="flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm relative overflow-hidden"
                                 style={{ borderColor: s.punti >= 0 ? '#bbf7d0' : '#fecaca' }}
                               >
                                 {/* Barra laterale colorata: verde bonus, rossa malus */}
                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${s.punti >= 0 ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                                <div className="pl-2">
-                                  <div className="text-xs font-bold text-gray-400 mb-1">{s.nomeGiudice}</div>
-                                  <div className="text-sm font-bold text-gray-800">"{s.azione}"</div>
+                                <div className="pl-2 min-w-0 flex-1">
+                                  <div className="text-xs font-bold text-gray-400 mb-0.5">{s.nomeGiudice}</div>
+                                  <div className="text-sm font-bold text-gray-800 truncate">"{s.azione}"</div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  <span className={`font-bold text-xs px-2 py-1 rounded ${
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <span className={`font-bold text-xs px-2 py-1 rounded whitespace-nowrap ${
                                     s.punti >= 0
                                       ? 'text-green-600 bg-green-50'
                                       : 'text-red-600 bg-red-50'
@@ -596,39 +500,19 @@ export default function App() {
                       Cap. {squadraSelezionataObj.capitano}
                     </p>
                   )}
-
-                  <div className="inline-flex items-center gap-1 bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-sm font-bold mt-2 shadow-sm">
-                    Budget residuo: {budget} FP
-                  </div>
                 </div>
 
                 <div className="space-y-6 flex-1 overflow-y-auto pr-1">
-                  <div>
-                    <h4 className="font-bold text-sm text-gray-400 uppercase mb-3 border-b border-gray-100 pb-1 sticky top-0 bg-white/95 z-10 py-1">Roster Giochi</h4>
-                    {squadra.giochiSelezionati.length === 0 ? (
-                      <div className="h-12 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex items-center justify-center text-gray-400 text-sm">
-                        Nessun gioco selezionato
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {squadra.giochiSelezionati.map(g => (
-                          <span key={g.id} className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${g.colore} flex items-center gap-1`}>
-                            {g.nome}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
 
                   <div>
                     <h4 className="font-bold text-sm text-gray-400 uppercase mb-3 border-b border-gray-100 pb-1 sticky top-0 bg-white/95 z-10 py-1">Pronostici</h4>
-                    {squadra.scommesse.length === 0 ? (
+                    {scommesse.length === 0 ? (
                       <div className="h-12 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex items-center justify-center text-gray-400 text-sm">
                         Nessun pronostico
                       </div>
                     ) : (
                       <ul className="space-y-2">
-                        {squadra.scommesse.map(s => (
+                        {scommesse.map(s => (
                           <li key={s.id} className="flex flex-col text-sm bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                             <div className="flex justify-between items-start mb-1">
                               <span className="font-bold text-gray-700">{s.nomeGiudice}</span>
@@ -653,10 +537,10 @@ export default function App() {
                   
                   <button
                     onClick={handleFinalSubmit}
-                    disabled={!selectedSquadra || squadra.giochiSelezionati.length === 0 || isSubmitting || submitSuccess || stepAttuale < 4}
+                    disabled={!selectedSquadra || isSubmitting || submitSuccess || stepAttuale < 4}
                     className={`
                       w-full py-4 rounded-xl font-black text-lg transition-all shadow-md flex justify-center items-center gap-2
-                      ${selectedSquadra && squadra.giochiSelezionati.length > 0 && !submitSuccess && !isSubmitting && stepAttuale >= 4
+                      ${selectedSquadra && !submitSuccess && !isSubmitting && stepAttuale >= 4
                         ? 'bg-gradient-to-r from-green-400 to-green-600 text-white hover:shadow-lg hover:-translate-y-0.5'
                         : submitSuccess
                           ? 'bg-green-500 text-white cursor-default'
