@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Settings,
   Loader2,
+  Lock,
 } from 'lucide-react';
 
 // --- Componenti estratti ---
@@ -60,6 +61,9 @@ export default function App() {
   // Stato Step 1 — ID della squadra selezionata dalla tendina
   const [selectedSquadra, setSelectedSquadra] = useState('');
 
+  // Stato di autenticazione capitano (validato via RPC login_capitano)
+  const [isCapitanoAutenticato, setIsCapitanoAutenticato] = useState(false);
+
   // Stato principale: le scommesse aggiunte dal capitano
   const [scommesse, setScommesse] = useState([]);
 
@@ -93,7 +97,7 @@ export default function App() {
     fetchData();
   }, []);
 
-  // ✅ CORREZIONE: Early return spostato QUI, dopo tutti gli hook (useState, useEffect)
+  // ✅ Early return DOPO tutti gli hook (useState, useEffect)
   // Se siamo nella route staff, rendiamo SOLO il pannello protetto
   if (currentRoute === '#/staff') {
     return <AreaStaff />;
@@ -115,7 +119,7 @@ export default function App() {
 
     try {
       const payloadArray = scommesse.map(s => ({
-        squadra_id: selectedSquadra,
+        squadra_id: Number(selectedSquadra), // forziamo a numero per coerenza con la FK BIGINT
         giudice_id: s.giudice_id,
         azione_scelta: s.azione,
         punti: s.punti,
@@ -159,6 +163,14 @@ export default function App() {
             <h1 className="text-3xl font-black tracking-tight text-blue-600 leading-none">FANTA</h1>
             <h2 className="text-xl font-bold text-slate-500 leading-none">GSF SUMMER</h2>
           </div>
+          {/* Icona accesso Area Staff — allineata completamente a destra */}
+          <a
+            href="#/staff"
+            className="ml-auto p-2.5 rounded-xl text-gray-300 hover:text-amber-500 hover:bg-amber-50 transition-all"
+            title="Area Staff"
+          >
+            <Lock size={20} />
+          </a>
         </div>
       </header>
 
@@ -170,7 +182,7 @@ export default function App() {
             <React.Fragment key={num}>
               <button
                 onClick={() => !submitSuccess && !isSubmitting && setStepAttuale(num)}
-                disabled={(submitSuccess && num !== 5) || isSubmitting}
+                disabled={(submitSuccess && num !== 5) || isSubmitting || (!isCapitanoAutenticato && num > 1)}
                 className={`
                   relative flex items-center justify-center w-12 h-12 rounded-full font-black text-lg transition-all shrink-0
                   ${stepAttuale === num
@@ -208,6 +220,7 @@ export default function App() {
                   squadraSelezionataObj={squadraSelezionataObj}
                   isLoadingDb={isLoadingDb}
                   setStepAttuale={setStepAttuale}
+                  setIsCapitanoAutenticato={setIsCapitanoAutenticato}
                 />
               )}
 
@@ -240,9 +253,17 @@ export default function App() {
                   </div>
                   <h3 className="font-black text-2xl text-gray-800 uppercase tracking-tight">Tutto pronto!</h3>
                   <p className="text-gray-500 mt-2 max-w-xs">Controlla l'anteprima sulla destra. Se sei soddisfatto della tua squadra, conferma per salvare e iscriverti.</p>
-                  
-                  <button onClick={() => setStepAttuale(3)} disabled={isSubmitting} className="mt-8 text-sm text-blue-500 font-bold hover:underline disabled:opacity-50">
-                    &larr; Torna indietro a modificare
+
+                  {/* Sostituisci il bottone dello step 4 con questo */}
+                  <button 
+                    onClick={() => {
+                      setStepAttuale(1);
+                      setIsCapitanoAutenticato(false); // Slogga il capitano se torna indietro!
+                    }} 
+                    disabled={isSubmitting} 
+                    className="mt-8 text-sm text-blue-500 font-bold hover:underline disabled:opacity-50"
+                  >
+                    &larr; Torna alla Home e cambia Squadra
                   </button>
                 </div>
               )}
@@ -288,17 +309,6 @@ export default function App() {
         </div>
 
       </main>
-
-      {/* Link nascosto per accedere all'Area Staff — visibile solo nel footer */}
-      <footer className="text-center py-4">
-        <a
-          href="#/staff"
-          className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
-          title="Area Staff"
-        >
-          🔒
-        </a>
-      </footer>
     </div>
   );
 }

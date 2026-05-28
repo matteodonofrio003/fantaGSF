@@ -36,8 +36,8 @@ const AreaStaff = () => {
     setIsLoading(true);
     setFeedback(null);
     try {
-      // ⚠️ FIX TEMPORANEO: Tolte le relazioni "squadre(nome)" e "giudici(nome)"
-      // per aggirare l'errore 400 di Supabase.
+      // Query con JOIN sulle tabelle squadre e giudici (FK configurate su Supabase:
+      // squadra_id -> squadre.id_squadra, giudice_id -> giudici.id_giudice)
       const { data, error } = await supabase
         .from('scommesse_del_capitano')
         .select(`
@@ -48,17 +48,20 @@ const AreaStaff = () => {
           punti,
           indovinata,
           validata_il,
-          piazzata_il
+          piazzata_il,
+          squadre!squadra_id ( nome ),
+          giudici!giudice_id ( nome )
         `)
         .order('piazzata_il', { ascending: false });
-
+        
       if (error) throw error;
 
-      // Inseriamo dei placeholder temporanei usando gli ID
+      // Flatten dei dati joinati per semplificare il rendering.
+      // Niente più placeholder "Squadra ID: X" — usiamo i nomi reali dalle JOIN.
       const scommesseFlatten = (data || []).map(s => ({
         ...s,
-        nome_squadra: `Squadra ID: ${s.squadra_id}`,
-        nome_giudice: `Giudice ID: ${s.giudice_id}`,
+        nome_squadra: s.squadre?.nome || '—',
+        nome_giudice: s.giudici?.nome || '—',
       }));
 
       setScommesse(scommesseFlatten);
@@ -117,7 +120,7 @@ const AreaStaff = () => {
 
       if (data?.success) {
         setScommesse(prev => prev.map(s =>
-          s.id_scommessa === idScommessa // MODIFICATO
+          s.id_scommessa === idScommessa
             ? { ...s, indovinata, validata_il: new Date().toISOString() }
             : s
         ));
@@ -154,7 +157,7 @@ const AreaStaff = () => {
 
       if (data?.success) {
         setScommesse(prev => prev.map(s =>
-          s.id_scommessa === idScommessa // MODIFICATO
+          s.id_scommessa === idScommessa
             ? { ...s, indovinata: null, validata_il: null }
             : s
         ));

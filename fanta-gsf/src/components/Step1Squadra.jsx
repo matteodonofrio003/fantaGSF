@@ -1,8 +1,9 @@
-import React from 'react';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
+import { Loader2, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
-// --- STEP 1 — Selezione Squadra ---
-// L'utente sceglie la propria squadra da una tendina (squadre pre-inserite nel DB).
+// --- STEP 1 — Login Capitano + Selezione Squadra ---
+// L'utente seleziona la squadra, inserisce il PIN e viene autenticato via RPC.
 const Step1Squadra = ({
   squadreDisponibili,
   selectedSquadra,
@@ -10,9 +11,53 @@ const Step1Squadra = ({
   squadraSelezionataObj,
   isLoadingDb,
   setStepAttuale,
+  setIsCapitanoAutenticato,  // setta lo stato globale di auth
 }) => {
+  // --- Stati locali per il form di login ---
+  const [pinCapitano, setPinCapitano] = useState('');
+  const [mostraPin, setMostraPin] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Gestisce il login del capitano tramite RPC
+  const handleLoginCapitano = async () => {
+    if (!selectedSquadra || !pinCapitano.trim()) return;
+
+    setLoginLoading(true);
+    setLoginError('');
+
+    try {
+      const { data, error } = await supabase.rpc('login_capitano', {
+        p_squadra_id: Number(selectedSquadra),
+        p_pin: pinCapitano,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        // Login riuscito → segna come autenticato e vai allo Step 2
+        setIsCapitanoAutenticato(true);
+        setStepAttuale(2);
+      } else {
+        setLoginError(data?.error || 'PIN errato.');
+      }
+    } catch (err) {
+      console.error('Errore login capitano:', err);
+      setLoginError('Errore di connessione. Riprova.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // Submit del form con Enter o click sul bottone
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    handleLoginCapitano();
+  };
+
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-left-4">
+    <form onSubmit={handleSubmit} className="space-y-5 animate-in fade-in slide-in-from-left-4">
+      {/* Selezione squadra dalla tendina */}
       <div>
         <label className="block text-sm font-bold text-gray-600 mb-2 uppercase">Seleziona la tua Squadra</label>
         {isLoadingDb ? (
@@ -23,7 +68,11 @@ const Step1Squadra = ({
         ) : (
           <select
             value={selectedSquadra}
-            onChange={(e) => setSelectedSquadra(e.target.value)}
+            onChange={(e) => {
+              setSelectedSquadra(e.target.value);
+              setLoginError('');       // Reset errore al cambio squadra
+              setPinCapitano('');      // Reset PIN al cambio squadra
+            }}
             className="w-full text-lg p-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-bold text-blue-900 appearance-none cursor-pointer"
           >
             <option value="">-- Scegli la tua squadra --</option>
@@ -36,7 +85,7 @@ const Step1Squadra = ({
         )}
       </div>
 
-      {/* Mostra dettagli della squadra selezionata */}
+      {/* Dettagli squadra selezionata */}
       {squadraSelezionataObj && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
           {squadraSelezionataObj.colore && (
@@ -51,14 +100,53 @@ const Step1Squadra = ({
         </div>
       )}
 
+      {/* Campo PIN — visibile solo quando una squadra è selezionata */}
+      {selectedSquadra && (
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase flex items-center gap-1">
+            <Lock size={12} />
+            PIN della Squadra
+          </label>
+          <div className="relative">
+            <input
+              type={mostraPin ? 'text' : 'password'}
+              value={pinCapitano}
+              onChange={(e) => setPinCapitano(e.target.value)}
+              placeholder="Inserisci il PIN del capitano"
+              className="w-full p-3.5 pr-12 bg-gray-50 border-2 border-gray-200 rounded-xl text-lg font-bold tracking-widest focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-400 placeholder:text-sm placeholder:tracking-normal"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setMostraPin(!mostraPin)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {mostraPin ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Messaggio di errore */}
+      {loginError && (
+        <div className="px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold text-center">
+          {loginError}
+        </div>
+      )}
+
+      {/* Bottone di login/proseguimento — disabilitato finché non c'è squadra + PIN */}
       <button
-        onClick={() => setStepAttuale(2)}
-        disabled={!selectedSquadra}
+        type="submit"
+        disabled={!selectedSquadra || !pinCapitano.trim() || loginLoading}
         className="w-full py-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-black rounded-xl text-lg flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Prosegui <ChevronRight size={20} />
+        {loginLoading ? (
+          <><Loader2 className="animate-spin" size={20} /> Verifica in corso...</>
+        ) : (
+          <><ShieldCheck size={20} /> Accedi e Prosegui</>
+        )}
       </button>
-    </div>
+    </form>
   );
 };
 
