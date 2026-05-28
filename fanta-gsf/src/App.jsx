@@ -13,6 +13,7 @@ import Step1Squadra from './components/Step1Squadra';
 import Step2Calendario from './components/Step2Calendario';
 import Step3Scommesse from './components/Step3Scommesse';
 import AnteprimaSidebar from './components/AnteprimaSidebar';
+import AreaStaff from './components/AreaStaff';
 
 // Funzione helper: raggruppa i record flat della tabella `catalogo_serate_giochi`
 // in un array di oggetti { serata, titolo, emoji, giochi[] } per la UI dello Step 2
@@ -33,6 +34,16 @@ const raggruppaPerSerata = (righeDb) => {
 };
 
 export default function App() {
+  // --- ROUTING BASATO SU HASH ---
+  // #/staff → pannello regia, qualsiasi altro hash → app capitano
+  const [currentRoute, setCurrentRoute] = useState(window.location.hash);
+
+  useEffect(() => {
+    const onHashChange = () => setCurrentRoute(window.location.hash);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const [stepAttuale, setStepAttuale] = useState(1);
 
   // Stato del Salvataggio DB
@@ -81,6 +92,12 @@ export default function App() {
     };
     fetchData();
   }, []);
+
+  // ✅ CORREZIONE: Early return spostato QUI, dopo tutti gli hook (useState, useEffect)
+  // Se siamo nella route staff, rendiamo SOLO il pannello protetto
+  if (currentRoute === '#/staff') {
+    return <AreaStaff />;
+  }
 
   // Ricava l'oggetto completo della squadra selezionata per l'anteprima
   const squadraSelezionataObj = squadreDisponibili.find(
@@ -231,7 +248,7 @@ export default function App() {
               )}
 
               {/* STEP 5 — Successo */}
-              {submitSuccess && (
+              {stepAttuale === 5 && submitSuccess && (
                 <div className="flex flex-col items-center justify-center h-full text-center animate-in zoom-in">
                   <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
                     <CheckCircle2 size={48} />
@@ -271,6 +288,17 @@ export default function App() {
         </div>
 
       </main>
+
+      {/* Link nascosto per accedere all'Area Staff — visibile solo nel footer */}
+      <footer className="text-center py-4">
+        <a
+          href="#/staff"
+          className="text-xs text-gray-300 hover:text-gray-500 transition-colors"
+          title="Area Staff"
+        >
+          🔒
+        </a>
+      </footer>
     </div>
   );
 }
