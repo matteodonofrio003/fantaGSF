@@ -1,11 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Star, ChevronRight, Loader2, CalendarClock } from 'lucide-react';
 
-// --- STEP 3 — Una scommessa per la SERATA IN CORSO ---
-// Il capitano accede una volta a serata e può scommettere SOLO per la serata
-// attualmente aperta (`serataCorrente`). Niente serate future o passate.
-// La fonte di verità è lo stato globale `scommesse` (in App), qui un array di
-// un solo elemento { num_serata: serataCorrente, ... }.
 const Step3Scommesse = ({
   giudiciDb,
   bonusMalusList,
@@ -16,29 +11,31 @@ const Step3Scommesse = ({
   setScommesse,
   setStepAttuale,
 }) => {
-  // La (eventuale) scommessa già impostata per la serata in corso
+  // Troviamo se c'è già una scommessa in memoria
   const corrente = scommesse.find(s => s.num_serata === serataCorrente) || null;
 
-  // Valori correnti delle select (string per coerenza con il DOM)
-  const idGiudiceSel = corrente?.giudice_id ?? '';
-  const idBonusSel = corrente ? String(corrente.id_bonus) : '';
+  // ✅ FIX: Usiamo STATI LOCALI per i menu a tendina.
+  // In questo modo il click non viene "resettato" immediatamente dal componente genitore.
+  const [idGiudiceSel, setIdGiudiceSel] = useState(corrente?.giudice_id ?? '');
+  const [idBonusSel, setIdBonusSel] = useState(corrente ? String(corrente.id_bonus) : '');
 
   // Info serata dal calendario (titolo + emoji)
   const infoSerata = calendarioSerate.find(c => c.serata === serataCorrente);
 
-  // Ricostruisce la singola scommessa a partire dai due id selezionati
-  const aggiorna = (nuovoGiudice, nuovoBonus) => {
+  // Aggiorna lo stato globale SOLO se entrambi i campi sono pieni
+  const aggiornaGlobale = (nuovoGiudice, nuovoBonus) => {
     if (!nuovoGiudice || !nuovoBonus) {
-      // Selezione incompleta → nessuna scommessa valida
-      setScommesse([]);
+      setScommesse([]); // Selezione incompleta
       return;
     }
     const giudice = giudiciDb.find(g => String(g.id_giudice) === String(nuovoGiudice));
     const bonus = bonusMalusList.find(x => x.id === Number(nuovoBonus));
+    
     if (!giudice || !bonus) {
       setScommesse([]);
       return;
     }
+
     setScommesse([{
       id: `serata-${serataCorrente}`,
       num_serata: serataCorrente,
@@ -50,8 +47,17 @@ const Step3Scommesse = ({
     }]);
   };
 
-  const onGiudiceChange = (e) => aggiorna(e.target.value, idBonusSel);
-  const onBonusChange = (e) => aggiorna(idGiudiceSel, e.target.value);
+  const onGiudiceChange = (e) => {
+    const val = e.target.value;
+    setIdGiudiceSel(val); // Salva il click a schermo
+    aggiornaGlobale(val, idBonusSel); // Tenta il salvataggio globale
+  };
+
+  const onBonusChange = (e) => {
+    const val = e.target.value;
+    setIdBonusSel(val); // Salva il click a schermo
+    aggiornaGlobale(idGiudiceSel, val); // Tenta il salvataggio globale
+  };
 
   const pronta = scommesse.length === 1;
 
