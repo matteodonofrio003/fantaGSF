@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, ChevronRight, Loader2 } from 'lucide-react';
+import { Calendar, ChevronRight, Loader2, Radio } from 'lucide-react';
 
 // Palette di gradienti per le card delle serate
 const serataColors = [
@@ -12,7 +12,7 @@ const serataColors = [
 
 // --- STEP 2 — Calendario Serate (read-only) ---
 // Visualizzazione dei giochi programmati per ogni serata. Nessuna interazione.
-const Step2Calendario = ({ calendarioSerate, isLoadingDb, setStepAttuale }) => {
+const Step2Calendario = ({ calendarioSerate, serataCorrente, isLoadingDb, setStepAttuale }) => {
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-left-4 flex flex-col h-full">
       <div className="shrink-0">
@@ -34,12 +34,24 @@ const Step2Calendario = ({ calendarioSerate, isLoadingDb, setStepAttuale }) => {
             Nessuna serata programmata.
           </div>
         ) : (
-          calendarioSerate.map((serata, idx) => (
-            <div key={serata.serata} className="rounded-2xl border border-gray-200 overflow-hidden bg-white shadow-sm">
+          calendarioSerate.map((serata, idx) => {
+            const isCorrente = serata.serata === serataCorrente;
+            return (
+            <div
+              key={serata.serata}
+              className={`rounded-2xl border overflow-hidden bg-white shadow-sm ${
+                isCorrente ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-200'
+              }`}
+            >
               {/* Header della serata con gradiente */}
               <div className={`bg-gradient-to-r ${serataColors[idx % serataColors.length]} px-4 py-2.5 flex items-center gap-2`}>
                 <span className="text-lg">{serata.emoji}</span>
                 <span className="text-white font-bold text-sm tracking-wide">{serata.titolo}</span>
+                {isCorrente && (
+                  <span className="ml-auto inline-flex items-center gap-1 bg-white/90 text-blue-700 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                    <Radio size={11} /> Stasera
+                  </span>
+                )}
               </div>
               {/* Lista giochi della serata */}
               <div className="p-3 flex flex-wrap gap-1.5">
@@ -53,12 +65,13 @@ const Step2Calendario = ({ calendarioSerate, isLoadingDb, setStepAttuale }) => {
                 ))}
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
       <button onClick={() => setStepAttuale(3)} className="w-full shrink-0 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors mt-auto">
-        Prosegui alle Scommesse <ChevronRight size={18} />
+        {serataCorrente ? 'Vai alla scommessa di stasera' : 'Prosegui alle Scommesse'} <ChevronRight size={18} />
       </button>
     </div>
   );

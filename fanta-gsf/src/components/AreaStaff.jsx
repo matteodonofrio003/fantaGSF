@@ -12,6 +12,8 @@ import {
   Lock,
   Eye,
   EyeOff,
+  CalendarClock,
+  Save,
 } from 'lucide-react';
 
 const AreaStaff = () => {
@@ -31,6 +33,54 @@ const AreaStaff = () => {
 
   // --- FILTRO ---
   const [filtroStato, setFiltroStato] = useState('tutti');
+
+  // --- CONTROLLO SERATA (modello ibrido: data + override) ---
+  const [serataConfig, setSerataConfig] = useState(null);   // risultato di get_serata_corrente
+  const [dataInizioInput, setDataInizioInput] = useState(''); // YYYY-MM-DD
+  const [overrideInput, setOverrideInput] = useState('');     // '' = automatica, '1'..'5' = forzata
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  const fetchSerataConfig = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_serata_corrente');
+      if (error) throw error;
+      setSerataConfig(data);
+      setDataInizioInput(data?.data_inizio || '');
+      setOverrideInput(data?.override != null ? String(data.override) : '');
+    } catch (err) {
+      console.error('Errore lettura config serata:', err);
+    }
+  }, []);
+
+  const salvaConfigSerata = async () => {
+    setSavingConfig(true);
+    setFeedback(null);
+    try {
+      const { data, error } = await supabase.rpc('set_config_serata', {
+        p_pin: pinSalvato,
+        p_data_inizio: dataInizioInput || null,
+        p_serata_override: overrideInput === '' ? null : Number(overrideInput),
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setFeedback({ type: 'success', text: 'Configurazione serata aggiornata.' });
+        await fetchSerataConfig();
+      } else {
+        if (data?.error?.includes('PIN')) {
+          setIsAutenticato(false);
+          setPinSalvato('');
+        }
+        setFeedback({ type: 'error', text: data?.error || 'Errore nel salvataggio.' });
+      }
+    } catch (err) {
+      console.error('Errore salvataggio config serata:', err);
+      setFeedback({ type: 'error', text: 'Errore di rete durante il salvataggio.' });
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const fetchScommesse = useCallback(async () => {
     setIsLoading(true);
@@ -102,8 +152,9 @@ const AreaStaff = () => {
   useEffect(() => {
     if (isAutenticato) {
       fetchScommesse();
+      fetchSerataConfig();
     }
-  }, [isAutenticato, fetchScommesse]);
+  }, [isAutenticato, fetchScommesse, fetchSerataConfig]);
 
   const validaScommessa = async (idScommessa, indovinata) => {
     setActionLoading(prev => ({ ...prev, [idScommessa]: true }));
@@ -179,6 +230,7 @@ const AreaStaff = () => {
     setPin('');
     setScommesse([]);
     setFeedback(null);
+    setSerataConfig(null);
   };
 
   const scommesseFiltrate = scommesse.filter(s => {
@@ -310,6 +362,70 @@ const AreaStaff = () => {
             {feedback.text}
           </div>
         )}
+
+        {/* CONTROLLO SERATA (modello ibrido: data + override staff) */}
+        <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarClock className="text-amber-400" size={20} />
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">Controllo Serata</h2>
+            {serataConfig && (
+              <span className="ml-auto text-xs font-bold px-3 py-1 rounded-full bg-slate-900 border border-slate-600">
+                {serataConfig.serata != null ? (
+                  <span className="text-amber-400">
+                    Serata in corso: <span className="text-white">{serataConfig.serata}</span>
+                    <span className="text-slate-500"> ({serataConfig.fonte === 'override' ? 'forzata' : 'da data'})</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Nessuna serata aperta</span>
+                )}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+            {/* Data di inizio (Serata 1) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                Data Serata 1
+              </label>
+              <input
+                type="date"
+                value={dataInizioInput}
+                onChange={(e) => setDataInizioInput(e.target.value)}
+                className="w-full p-2.5 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Le 5 serate sono giorni consecutivi.</p>
+            </div>
+
+            {/* Override manuale */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                Serata attiva
+              </label>
+              <select
+                value={overrideInput}
+                onChange={(e) => setOverrideInput(e.target.value)}
+                className="w-full p-2.5 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all"
+              >
+                <option value="">Automatica (per data)</option>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <option key={n} value={n}>Forza Serata {n}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">Override per ritardi/rinvii.</p>
+            </div>
+
+            {/* Salva */}
+            <button
+              onClick={salvaConfigSerata}
+              disabled={savingConfig}
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-black rounded-xl text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {savingConfig ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+              Salva
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2 mb-6">
           {[

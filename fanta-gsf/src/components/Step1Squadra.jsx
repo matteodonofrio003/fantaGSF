@@ -3,7 +3,10 @@ import { supabase } from '../supabaseClient';
 import { Loader2, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 // --- STEP 1 — Login Capitano + Selezione Squadra ---
-// L'utente seleziona la squadra, inserisce il PIN e viene autenticato via RPC.
+// Dopo il login determiniamo la serata in corso e decidiamo dove mandare l'utente:
+//   • nessuna serata aperta            → Dashboard read-only (Step 6)
+//   • serata aperta già giocata        → Dashboard read-only (Step 6)
+//   • serata aperta NON ancora giocata → Wizard per piazzare quella scommessa (Step 2)
 const Step1Squadra = ({
   squadreDisponibili,
   selectedSquadra,
@@ -11,7 +14,10 @@ const Step1Squadra = ({
   squadraSelezionataObj,
   isLoadingDb,
   setStepAttuale,
-  setIsCapitanoAutenticato,  // setta lo stato globale di auth
+  setIsCapitanoAutenticato,    // stato globale di auth
+  setSerataCorrente,           // numero serata in corso (o null)
+  setMostraDashboard,          // true → mostra la Dashboard invece del wizard
+  setScommesseGiaEffettuate,   // tutte le scommesse della squadra (per la dashboard)
 }) => {
   // --- Stati locali per il form di login ---
   const [pinCapitano, setPinCapitano] = useState('');
@@ -19,7 +25,7 @@ const Step1Squadra = ({
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Gestisce il login del capitano tramite RPC
+  // Gestisce il login del capitano tramite RPC e la successiva biforcazione
   const handleLoginCapitano = async () => {
     if (!selectedSquadra || !pinCapitano.trim()) return;
 
@@ -34,12 +40,55 @@ const Step1Squadra = ({
 
       if (error) throw error;
 
-      if (data?.success) {
-        // Login riuscito → segna come autenticato e vai allo Step 2
-        setIsCapitanoAutenticato(true);
-        setStepAttuale(2);
-      } else {
+      if (!data?.success) {
         setLoginError(data?.error || 'PIN errato.');
+        return;
+      }
+
+      // Login riuscito → segna come autenticato
+      setIsCapitanoAutenticato(true);
+
+      // 1) Qual è la serata in corso? (modello ibrido: data + override staff)
+      const { data: serataData, error: serataErr } = await supabase.rpc('get_serata_corrente');
+      if (serataErr) throw serataErr;
+      const serata = serataData?.serata ?? null;
+      setSerataCorrente(serata);
+
+      // 2) Carica TUTTE le scommesse della squadra (servono comunque alla dashboard).
+      //    Join sul giudice (FK giudice_id -> giudici.id_giudice) per il nome.
+      const { data: scommesseDb, error: scommesseErr } = await supabase
+        .from('scommesse_del_capitano')
+        .select(`
+          id_scommessa,
+          num_serata,
+          azione_scelta,
+          punti,
+          indovinata,
+          giudice_id,
+          giudici!giudice_id ( nome )
+        `)
+        .eq('squadra_id', Number(selectedSquadra))
+        .order('num_serata', { ascending: true });
+
+      if (scommesseErr) throw scommesseErr;
+
+      const flatten = (scommesseDb || []).map(s => ({
+        ...s,
+        nome_giudice: s.giudici?.nome || '—',
+      }));
+      setScommesseGiaEffettuate(flatten);
+
+      // 3) Biforcazione
+      const haGiocatoStasera = serata != null && flatten.some(s => s.num_serata === serata);
+
+      if (serata == null || haGiocatoStasera) {
+        // Nessuna serata aperta, oppure già scommesso per quella in corso → Dashboard
+        setMostraDashboard(true);
+        setStepAttuale(6);
+      } else {
+        // Può piazzare la scommessa per la serata in corso → wizard
+        setMostraDashboard(false);
+        setStepAttuale(2);
       }
     } catch (err) {
       console.error('Errore login capitano:', err);

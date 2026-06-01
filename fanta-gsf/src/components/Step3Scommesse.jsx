@@ -1,57 +1,70 @@
-import React, { useState } from 'react';
-import { Star, ChevronRight, Loader2, Trash2 } from 'lucide-react';
+import React from 'react';
+import { Star, ChevronRight, Loader2, CalendarClock } from 'lucide-react';
 
-// --- STEP 3 — Scommesse con Bonus/Malus predefiniti dalla regia ---
-// Il capitano abbina un giudice (da Supabase) a un bonus/malus dal catalogo.
-// Lo stato locale `nuovaScommessa` e la funzione `aggiungiScommessa` vivono qui dentro.
+// --- STEP 3 — Una scommessa per la SERATA IN CORSO ---
+// Il capitano accede una volta a serata e può scommettere SOLO per la serata
+// attualmente aperta (`serataCorrente`). Niente serate future o passate.
+// La fonte di verità è lo stato globale `scommesse` (in App), qui un array di
+// un solo elemento { num_serata: serataCorrente, ... }.
 const Step3Scommesse = ({
   giudiciDb,
   bonusMalusList,
+  calendarioSerate = [],
+  serataCorrente,
   isLoadingDb,
   scommesse,
   setScommesse,
   setStepAttuale,
 }) => {
-  // Stato locale del form — giudice + bonus/malus selezionato
-  const [nuovaScommessa, setNuovaScommessa] = useState({
-    id_giudice: '',
-    id_bonus: '',
-  });
+  // La (eventuale) scommessa già impostata per la serata in corso
+  const corrente = scommesse.find(s => s.num_serata === serataCorrente) || null;
 
-  // Aggiunge una scommessa abbinando un giudice a un bonus/malus dal catalogo Supabase
-  const aggiungiScommessa = () => {
-    if (!nuovaScommessa.id_giudice || !nuovaScommessa.id_bonus) return;
+  // Valori correnti delle select (string per coerenza con il DOM)
+  const idGiudiceSel = corrente?.giudice_id ?? '';
+  const idBonusSel = corrente ? String(corrente.id_bonus) : '';
 
-    const giudice = giudiciDb.find(g => g.id_giudice === nuovaScommessa.id_giudice);
-    const bonusScelto = bonusMalusList.find(b => b.id === Number(nuovaScommessa.id_bonus));
-    if (!bonusScelto) return;
+  // Info serata dal calendario (titolo + emoji)
+  const infoSerata = calendarioSerate.find(c => c.serata === serataCorrente);
 
-    const scommessaCompleta = {
-      id: Date.now().toString(),
-      giudice_id: nuovaScommessa.id_giudice,
-      id_bonus: bonusScelto.id,
-      azione: bonusScelto.descrizione,
-      punti: bonusScelto.punti,
-      nomeGiudice: giudice?.nome,
-    };
-
-    setScommesse(prev => [...prev, scommessaCompleta]);
-    setNuovaScommessa({ id_giudice: '', id_bonus: '' });
+  // Ricostruisce la singola scommessa a partire dai due id selezionati
+  const aggiorna = (nuovoGiudice, nuovoBonus) => {
+    if (!nuovoGiudice || !nuovoBonus) {
+      // Selezione incompleta → nessuna scommessa valida
+      setScommesse([]);
+      return;
+    }
+    const giudice = giudiciDb.find(g => String(g.id_giudice) === String(nuovoGiudice));
+    const bonus = bonusMalusList.find(x => x.id === Number(nuovoBonus));
+    if (!giudice || !bonus) {
+      setScommesse([]);
+      return;
+    }
+    setScommesse([{
+      id: `serata-${serataCorrente}`,
+      num_serata: serataCorrente,
+      giudice_id: nuovoGiudice,
+      id_bonus: bonus.id,
+      azione: bonus.descrizione,
+      punti: bonus.punti,
+      nomeGiudice: giudice.nome,
+    }]);
   };
 
-  // Rimuove una scommessa dalla lista locale
-  const rimuoviScommessa = (idScommessa) => {
-    setScommesse(prev => prev.filter(s => s.id !== idScommessa));
-  };
+  const onGiudiceChange = (e) => aggiorna(e.target.value, idBonusSel);
+  const onBonusChange = (e) => aggiorna(idGiudiceSel, e.target.value);
+
+  const pronta = scommesse.length === 1;
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-left-4 flex flex-col h-full">
       <div className="shrink-0">
         <h4 className="font-bold text-gray-700 flex items-center gap-2">
           <Star className="text-yellow-500" size={20} />
-          Scommesse Bonus / Malus
+          La tua scommessa di stasera
         </h4>
-        <p className="text-sm text-gray-500 mb-4">Abbina un giudice a un bonus o malus predefinito dalla regia.</p>
+        <p className="text-sm text-gray-500">
+          Hai diritto a una sola scommessa per serata: scegli un giudice e un bonus/malus.
+        </p>
       </div>
 
       {isLoadingDb ? (
@@ -61,13 +74,29 @@ const Step3Scommesse = ({
         </div>
       ) : (
         <>
+          {/* Badge serata in corso */}
+          <div className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl px-4 py-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-xl shrink-0">
+              {infoSerata?.emoji || '🎮'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-200 flex items-center gap-1">
+                <CalendarClock size={12} /> Serata in corso
+              </p>
+              <p className="font-black truncate">
+                {infoSerata?.titolo || `Serata ${serataCorrente}`}
+              </p>
+            </div>
+            <span className="ml-auto text-2xl font-black shrink-0">#{serataCorrente}</span>
+          </div>
+
+          {/* Form della scommessa */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3 shrink-0">
-            {/* Select del Giudice (da Supabase) */}
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Giudice</label>
               <select
-                value={nuovaScommessa.id_giudice}
-                onChange={e => setNuovaScommessa({...nuovaScommessa, id_giudice: e.target.value})}
+                value={idGiudiceSel}
+                onChange={onGiudiceChange}
                 className="w-full p-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
               >
                 <option value="">-- Seleziona un giudice --</option>
@@ -77,12 +106,11 @@ const Step3Scommesse = ({
               </select>
             </div>
 
-            {/* Select Bonus/Malus — dati da Supabase tabella `catalogo_bonus_malus` */}
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Bonus / Malus</label>
               <select
-                value={nuovaScommessa.id_bonus}
-                onChange={e => setNuovaScommessa({...nuovaScommessa, id_bonus: e.target.value})}
+                value={idBonusSel}
+                onChange={onBonusChange}
                 className="w-full p-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
               >
                 <option value="">-- Scegli un bonus/malus --</option>
@@ -93,53 +121,49 @@ const Step3Scommesse = ({
                 ))}
               </select>
             </div>
-
-            <button
-              onClick={aggiungiScommessa}
-              disabled={!nuovaScommessa.id_giudice || !nuovaScommessa.id_bonus}
-              className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-            >
-              Aggiungi Scommessa
-            </button>
           </div>
 
-          {/* Lista scommesse aggiunte */}
-          <div className="flex-1 overflow-y-auto pr-2 mt-2">
-            {scommesse.length > 0 && (
-              <div className="space-y-2 pb-2">
-                <h5 className="font-bold text-xs uppercase text-gray-500 mt-2">Le tue scommesse:</h5>
-                {scommesse.map(s => (
-                  <div key={s.id} className="flex items-center justify-between bg-white p-3 rounded-lg border shadow-sm relative overflow-hidden"
-                    style={{ borderColor: s.punti >= 0 ? '#bbf7d0' : '#fecaca' }}
-                  >
-                    {/* Barra laterale colorata: verde bonus, rossa malus */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${s.punti >= 0 ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                    <div className="pl-2 min-w-0 flex-1">
-                      <div className="text-xs font-bold text-gray-400 mb-0.5">{s.nomeGiudice}</div>
-                      <div className="text-sm font-bold text-gray-800 truncate">"{s.azione}"</div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                      <span className={`font-bold text-xs px-2 py-1 rounded whitespace-nowrap ${
-                        s.punti >= 0
-                          ? 'text-green-600 bg-green-50'
-                          : 'text-red-600 bg-red-50'
-                      }`}>
-                        {s.punti >= 0 ? '+' : ''}{s.punti} pt
-                      </span>
-                      <button onClick={() => rimuoviScommessa(s.id)} className="text-red-400 hover:text-red-600 p-1.5 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Rimuovi scommessa">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+          {/* Riepilogo della scelta corrente */}
+          <div className="flex-1 overflow-y-auto pr-1 mt-1">
+            {corrente ? (
+              <div className="bg-white p-3 rounded-lg border shadow-sm relative overflow-hidden"
+                style={{ borderColor: corrente.punti >= 0 ? '#bbf7d0' : '#fecaca' }}
+              >
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${corrente.punti >= 0 ? 'bg-green-400' : 'bg-red-400'}`} />
+                <div className="flex items-center justify-between pl-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-gray-400 mb-0.5">{corrente.nomeGiudice}</div>
+                    <div className="text-sm font-bold text-gray-800 truncate">"{corrente.azione}"</div>
                   </div>
-                ))}
+                  <span className={`font-bold text-xs px-2 py-1 rounded whitespace-nowrap ml-2 ${
+                    corrente.punti >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
+                  }`}>
+                    {corrente.punti >= 0 ? '+' : ''}{corrente.punti} pt
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="h-16 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex items-center justify-center text-gray-400 text-sm font-bold">
+                Compila giudice e bonus/malus
               </div>
             )}
           </div>
         </>
       )}
 
-      <button onClick={() => setStepAttuale(4)} className="w-full shrink-0 mt-auto py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
-        Vai al Riepilogo <ChevronRight size={18} />
+      {/* Procedi: abilitato SOLO quando la scommessa è completa */}
+      <button
+        onClick={() => setStepAttuale(4)}
+        disabled={!pronta}
+        className={`w-full shrink-0 mt-auto py-3 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors ${
+          pronta
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+        }`}
+      >
+        {pronta
+          ? <>Vai al Riepilogo <ChevronRight size={18} /></>
+          : 'Completa la scommessa'}
       </button>
     </div>
   );
