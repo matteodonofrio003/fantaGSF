@@ -6,10 +6,10 @@ import {
   Settings,
   LayoutDashboard,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 
 // --- Componenti estratti ---
-import LogoGSF from './components/LogoGSF';
 import Step1Squadra from './components/Step1Squadra';
 import Step2Calendario from './components/Step2Calendario';
 import Step3Scommesse from './components/Step3Scommesse';
@@ -17,6 +17,11 @@ import AnteprimaSidebar from './components/AnteprimaSidebar';
 import AreaStaff from './components/AreaStaff';
 import DashboardCapitano from './components/DashboardCapitano';
 import Classifica from './components/Classifica';
+
+// Palette ripresa dalle macchie del logo (rosso, arancio, giallo, verde, blu, viola)
+const RAINBOW = 'linear-gradient(to right, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #a855f7)';
+// Un colore del logo per ciascuno dei 5 step (mappa a livelli)
+const STEP_COLORS = ['#ef4444', '#f97316', '#22c55e', '#3b82f6', '#a855f7'];
 
 // Funzione helper: raggruppa i record flat della tabella `catalogo_serate_giochi`
 // in un array di oggetti { serata, titolo, emoji, giochi[] } per la UI dello Step 2
@@ -213,37 +218,72 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-yellow-200">
+    <div className="relative min-h-screen font-sans text-slate-800 selection:bg-amber-200">
 
-      {/* HEADER */}
-      <header className="bg-white border-b-4 border-yellow-400 shadow-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center gap-4">
-          <LogoGSF />
-          <div className="flex flex-col border-l-2 border-gray-200 pl-4">
-            <h1 className="text-3xl font-black tracking-tight text-blue-600 leading-none">FANTA</h1>
-            <h2 className="text-xl font-bold text-slate-500 leading-none">GSF SUMMER</h2>
+      {/* Sfondo decorativo: base calda + blob arcobaleno del logo */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b from-amber-50 via-white to-sky-50 pointer-events-none"
+      >
+        <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full blur-3xl" style={{ background: 'rgba(244,63,94,0.22)' }} />
+        <div className="absolute top-24 -right-24 w-96 h-96 rounded-full blur-3xl" style={{ background: 'rgba(59,130,246,0.20)' }} />
+        <div className="absolute bottom-0 left-1/4 w-80 h-80 rounded-full blur-3xl" style={{ background: 'rgba(34,197,94,0.18)' }} />
+        <div className="absolute top-1/3 right-1/3 w-72 h-72 rounded-full blur-3xl" style={{ background: 'rgba(168,85,247,0.16)' }} />
+      </div>
+
+      {/* HEADER LUMINOSO */}
+      <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center gap-3 sm:gap-4">
+          {/* Logo tondo con anello arcobaleno */}
+          <div className="rounded-full p-[3px] shrink-0" style={{ background: RAINBOW }}>
+            <img
+              src="/logo.jpg"
+              alt="Logo Fanta GSF"
+              className="rounded-full object-cover border-2 border-white block"
+              style={{ width: '3.25rem', height: '3.25rem' }}
+            />
           </div>
-          {/* Azioni header — allineate a destra */}
-          <div className="ml-auto flex items-center gap-2">
-            {/* Coppa → Classifica pubblica (molto visibile, hover dorato) */}
+          {/* Titolo con gradiente arcobaleno */}
+          <div className="flex flex-col leading-none">
+            <h1
+              className="text-2xl sm:text-3xl font-black tracking-tight"
+              style={{
+                backgroundImage: RAINBOW,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
+              FANTA GSF
+            </h1>
+            <span className="text-[11px] sm:text-sm font-black uppercase tracking-[0.25em] text-slate-400 mt-0.5">
+              Summer Games
+            </span>
+          </div>
+
+          {/* Azioni header — pulsanti giocosi a destra */}
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {/* Coppa → Classifica pubblica */}
             <a
               href="#/classifica"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-yellow-400 text-yellow-900 font-bold hover:bg-yellow-500 hover:shadow-md hover:shadow-yellow-200 transition-all active:scale-95"
+              className="group flex items-center gap-1.5 pl-3 pr-4 py-2.5 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-400 text-amber-900 font-black shadow-lg shadow-amber-300/50 hover:-translate-y-0.5 hover:scale-105 active:scale-95 transition-all"
               title="Classifica Generale"
             >
-              <Trophy size={18} />
+              <Trophy size={18} className="group-hover:rotate-12 transition-transform" />
               <span className="hidden sm:inline text-sm">Classifica</span>
             </a>
             {/* Icona accesso Area Staff */}
             <a
               href="#/staff"
-              className="p-2.5 rounded-xl text-gray-300 hover:text-amber-500 hover:bg-amber-50 transition-all"
+              className="w-11 h-11 flex items-center justify-center rounded-full bg-violet-100 text-violet-500 shadow-sm hover:bg-violet-200 hover:-translate-y-0.5 hover:scale-105 active:scale-95 transition-all"
               title="Area Staff"
             >
               <Lock size={20} />
             </a>
           </div>
         </div>
+        {/* Striscia arcobaleno sotto l'header */}
+        <div className="h-2 w-full" style={{ background: RAINBOW }} />
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
@@ -258,39 +298,48 @@ export default function App() {
           />
         ) : (
           <>
-            {/* PROGRESS BAR */}
-            <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-              {[1, 2, 3, 4, 5].map((num) => (
-                <React.Fragment key={num}>
-                  <button
-                    onClick={() => !submitSuccess && !isSubmitting && setStepAttuale(num)}
-                    disabled={(submitSuccess && num !== 5) || isSubmitting || (!isCapitanoAutenticato && num > 1)}
-                    className={`
-                      relative flex items-center justify-center w-12 h-12 rounded-full font-black text-lg transition-all shrink-0
-                      ${stepAttuale === num
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-110'
-                        : stepAttuale > num || submitSuccess
-                          ? 'bg-green-100 text-green-600 border-2 border-green-200'
-                          : 'bg-gray-100 text-gray-400 border-2 border-gray-200 hover:bg-gray-200'}
-                    `}
-                  >
-                    {stepAttuale > num || submitSuccess ? <CheckCircle2 size={24} /> : num}
-                  </button>
-                  {num < 5 && (
-                    <div className={`h-1 flex-1 mx-2 rounded ${stepAttuale > num || submitSuccess ? 'bg-green-200' : 'bg-gray-100 min-w-[30px]'}`} />
-                  )}
-                </React.Fragment>
-              ))}
+            {/* PROGRESS BAR — Mappa a livelli, ogni step un colore del logo */}
+            <div className="flex justify-between items-center mb-8 bg-white/80 backdrop-blur p-4 rounded-3xl shadow-lg shadow-slate-200/50 border border-white overflow-x-auto">
+              {[1, 2, 3, 4, 5].map((num) => {
+                const done = stepAttuale > num || submitSuccess;
+                const active = stepAttuale === num;
+                const colored = done || active;
+                const c = STEP_COLORS[num - 1];
+                return (
+                  <React.Fragment key={num}>
+                    <button
+                      onClick={() => !submitSuccess && !isSubmitting && setStepAttuale(num)}
+                      disabled={(submitSuccess && num !== 5) || isSubmitting || (!isCapitanoAutenticato && num > 1)}
+                      className={`relative flex items-center justify-center w-12 h-12 rounded-full font-black text-xl transition-all shrink-0 ${active ? 'scale-110' : ''} ${colored ? 'text-white' : 'bg-white text-slate-300 border-2 border-slate-200 hover:border-slate-300'}`}
+                      style={colored ? {
+                        background: `linear-gradient(135deg, ${c}, ${c}cc)`,
+                        boxShadow: `0 10px 22px -8px ${c}`,
+                        outline: active ? `4px solid ${c}33` : 'none',
+                      } : undefined}
+                    >
+                      {done ? <CheckCircle2 size={24} /> : num}
+                    </button>
+                    {num < 5 && (
+                      <div
+                        className="h-2 flex-1 mx-1.5 rounded-full min-w-[24px] transition-all"
+                        style={{ background: done ? `linear-gradient(to right, ${STEP_COLORS[num - 1]}, ${STEP_COLORS[num]})` : '#e2e8f0' }}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
 
-              {/* PANNELLO DI CONFIGURAZIONE (Sinistra) */}
+              {/* PANNELLO DI CONFIGURAZIONE (Sinistra) — scheda di gioco */}
               <div className="lg:col-span-5 flex flex-col gap-4">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200 flex flex-col" style={{ minHeight: '520px' }}>
-                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 shrink-0">
-                    <Settings className="text-blue-500" />
-                    <h3 className="font-bold text-xl uppercase tracking-wider text-gray-800">Pannello Config.</h3>
+                <div className="bg-white rounded-[2rem] shadow-2xl shadow-slate-200/60 border-4 border-white ring-1 ring-slate-100 p-6 flex flex-col" style={{ minHeight: '520px' }}>
+                  <div className="flex items-center gap-3 mb-6 pb-4 border-b-2 border-dashed border-slate-100 shrink-0">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-300/50">
+                      <Settings className="text-white" size={22} />
+                    </div>
+                    <h3 className="font-black text-xl uppercase tracking-wide bg-gradient-to-r from-blue-600 to-indigo-600 text-transparent bg-clip-text">Pannello Config.</h3>
                   </div>
 
                   {/* STEP 1 */}
@@ -336,11 +385,11 @@ export default function App() {
                   {/* STEP 4 — Conferma finale */}
                   {stepAttuale === 4 && !submitSuccess && (
                     <div className="flex flex-col items-center justify-center h-full text-center animate-in zoom-in">
-                      <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-6">
-                        <Trophy size={40} />
+                      <div className="w-24 h-24 bg-gradient-to-tr from-amber-400 to-orange-500 text-white rounded-full flex items-center justify-center mb-6 shadow-xl shadow-orange-300/50 animate-bounce">
+                        <Trophy size={44} />
                       </div>
-                      <h3 className="font-black text-2xl text-gray-800 uppercase tracking-tight">Tutto pronto!</h3>
-                      <p className="text-gray-500 mt-2 max-w-xs">Controlla l'anteprima sulla destra. Se sei soddisfatto della tua scommessa per la Serata {serataCorrente}, conferma per salvarla.</p>
+                      <h3 className="font-black text-2xl text-slate-800 uppercase tracking-tight">Tutto pronto!</h3>
+                      <p className="text-slate-500 mt-2 max-w-xs font-medium">Controlla l'anteprima sulla destra. Se sei soddisfatto della tua scommessa per la Serata {serataCorrente}, conferma per salvarla.</p>
 
                       <button
                         onClick={handleCambiaSquadra}
@@ -355,17 +404,20 @@ export default function App() {
                   {/* STEP 5 — Successo */}
                   {stepAttuale === 5 && submitSuccess && (
                     <div className="flex flex-col items-center justify-center h-full text-center animate-in zoom-in">
-                      <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                        <CheckCircle2 size={48} />
+                      <div className="relative mb-6">
+                        <div className="w-28 h-28 bg-gradient-to-tr from-green-400 to-emerald-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-emerald-300/50">
+                          <CheckCircle2 size={56} />
+                        </div>
+                        <Sparkles className="absolute -top-1 -right-1 text-amber-400 animate-pulse" size={28} />
                       </div>
-                      <h3 className="font-black text-3xl text-gray-800 uppercase tracking-tight">Scommessa salvata!</h3>
-                      <p className="text-gray-500 mt-3 font-medium">In bocca al lupo per la Serata {serataCorrente} dei GSF Summer!</p>
+                      <h3 className="font-black text-3xl text-slate-800 uppercase tracking-tight">Scommessa salvata!</h3>
+                      <p className="text-slate-500 mt-3 font-medium">In bocca al lupo per la Serata {serataCorrente} dei GSF Summer!</p>
 
                       <button
                         onClick={vaiAllaDashboard}
-                        className="mt-8 inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                        className="group mt-8 inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-black rounded-2xl shadow-lg shadow-blue-300/50 hover:-translate-y-1 hover:scale-105 active:scale-95 transition-all"
                       >
-                        <LayoutDashboard size={18} /> Vai alla mia Dashboard
+                        <LayoutDashboard size={18} className="group-hover:rotate-6 transition-transform" /> Vai alla mia Dashboard
                       </button>
                     </div>
                   )}
@@ -375,12 +427,12 @@ export default function App() {
 
               {/* FRECCIA INDICATRICE */}
               <div className="hidden lg:flex col-span-2 items-center justify-center">
-                <div className="flex flex-col items-center text-gray-400 animate-pulse">
-                  <svg width="100" height="40" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-gray-300">
+                <div className="flex flex-col items-center text-amber-400 animate-pulse">
+                  <svg width="100" height="40" viewBox="0 0 100 40" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray="4 4" className="text-amber-300">
                     <path d="M0,20 C30,20 70,20 90,20" />
                     <path d="M80,10 L95,20 L80,30" strokeDasharray="0" />
                   </svg>
-                  <span className="text-[10px] font-bold uppercase tracking-widest mt-2 text-center text-gray-400">
+                  <span className="text-[10px] font-black uppercase tracking-widest mt-2 text-center text-amber-500">
                     Aggiorna<br />Anteprima
                   </span>
                 </div>

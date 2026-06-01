@@ -102,9 +102,9 @@ const Step1Squadra = ({
     <form onSubmit={handleSubmit} className="space-y-5 animate-in fade-in slide-in-from-left-4">
       {/* Selezione squadra dalla tendina */}
       <div>
-        <label className="block text-sm font-bold text-gray-600 mb-2 uppercase">Seleziona la tua Squadra</label>
+        <label className="block text-sm font-black text-slate-600 mb-2 uppercase tracking-wide">🏆 Seleziona la tua Squadra</label>
         {isLoadingDb ? (
-          <div className="flex items-center justify-center py-8 text-gray-400">
+          <div className="flex items-center justify-center py-8 text-slate-400">
             <Loader2 className="animate-spin mr-2 text-blue-500" size={24} />
             <span className="text-sm font-bold">Caricamento squadre...</span>
           </div>
@@ -116,7 +116,7 @@ const Step1Squadra = ({
               setLoginError('');       // Reset errore al cambio squadra
               setPinCapitano('');      // Reset PIN al cambio squadra
             }}
-            className="w-full text-lg p-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all outline-none font-bold text-blue-900 appearance-none cursor-pointer"
+            className="w-full text-lg p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-amber-400 focus:ring-4 focus:ring-amber-200 transition-all outline-none font-bold text-blue-900 appearance-none cursor-pointer hover:border-amber-300"
           >
             <option value="">-- Scegli la tua squadra --</option>
             {squadreDisponibili.map(sq => (
@@ -130,14 +130,14 @@ const Step1Squadra = ({
 
       {/* Dettagli squadra selezionata */}
       {squadraSelezionataObj && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-2xl p-4 flex items-center gap-3 animate-in fade-in zoom-in">
           {squadraSelezionataObj.colore && (
-            <div className="w-8 h-8 rounded-full shrink-0 border-2 border-white shadow" style={{ backgroundColor: squadraSelezionataObj.colore }} />
+            <div className="w-10 h-10 rounded-full shrink-0 border-2 border-white shadow-md" style={{ backgroundColor: squadraSelezionataObj.colore }} />
           )}
           <div>
-            <p className="font-bold text-blue-900">{squadraSelezionataObj.nome}</p>
+            <p className="font-black text-blue-900">{squadraSelezionataObj.nome}</p>
             {squadraSelezionataObj.capitano && (
-              <p className="text-sm text-blue-600">Capitano: {squadraSelezionataObj.capitano}</p>
+              <p className="text-sm font-bold text-blue-500">Capitano: {squadraSelezionataObj.capitano}</p>
             )}
           </div>
         </div>
@@ -145,8 +145,8 @@ const Step1Squadra = ({
 
       {/* Campo PIN — visibile solo quando una squadra è selezionata */}
       {selectedSquadra && (
-        <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase flex items-center gap-1">
+        <div className="animate-in fade-in slide-in-from-bottom-2">
+          <label className="block text-xs font-black text-slate-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
             <Lock size={12} />
             PIN della Squadra
           </label>
@@ -156,13 +156,13 @@ const Step1Squadra = ({
               value={pinCapitano}
               onChange={(e) => setPinCapitano(e.target.value)}
               placeholder="Inserisci il PIN del capitano"
-              className="w-full p-3.5 pr-12 bg-gray-50 border-2 border-gray-200 rounded-xl text-lg font-bold tracking-widest focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-400 placeholder:text-sm placeholder:tracking-normal"
+              className="w-full p-4 pr-14 bg-slate-50 border-2 border-slate-200 rounded-2xl text-lg font-bold tracking-widest focus:border-amber-400 focus:ring-4 focus:ring-amber-200 outline-none transition-all placeholder:text-slate-400 placeholder:text-sm placeholder:tracking-normal hover:border-amber-300"
               autoFocus
             />
             <button
               type="button"
               onClick={() => setMostraPin(!mostraPin)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             >
               {mostraPin ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -172,21 +172,21 @@ const Step1Squadra = ({
 
       {/* Messaggio di errore */}
       {loginError && (
-        <div className="px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold text-center">
+        <div className="px-4 py-3 bg-rose-50 border-2 border-rose-200 rounded-2xl text-rose-600 text-sm font-bold text-center animate-in fade-in zoom-in">
           {loginError}
         </div>
       )}
 
-      {/* Bottone di login/proseguimento — disabilitato finché non c'è squadra + PIN */}
+      {/* Bottone di login/proseguimento — CTA gamificata */}
       <button
         type="submit"
         disabled={!selectedSquadra || !pinCapitano.trim() || loginLoading}
-        className="w-full py-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-black rounded-xl text-lg flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="group w-full py-4 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-black rounded-2xl text-lg flex items-center justify-center gap-2 shadow-lg shadow-orange-300/50 transition-all hover:-translate-y-1 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:shadow-none"
       >
         {loginLoading ? (
           <><Loader2 className="animate-spin" size={20} /> Verifica in corso...</>
         ) : (
-          <><ShieldCheck size={20} /> Accedi e Prosegui</>
+          <><ShieldCheck size={22} className="group-hover:rotate-12 transition-transform" /> Accedi e Prosegui</>
         )}
       </button>
     </form>
