@@ -171,18 +171,20 @@ export default function App() {
 
       console.log('PAYLOAD PER SUPABASE:', payloadArray);
 
-      const { data, error } = await supabase
+      // NB: nessun .select() dopo l'insert. Con la lettura blindata (niente policy
+      // SELECT) un INSERT ... RETURNING verrebbe negato dalla RLS. L'insert "puro"
+      // richiede solo la policy anon_insert_scommesse.
+      const { error } = await supabase
         .from('scommesse_del_capitano')
-        .insert(payloadArray)
-        .select();
+        .insert(payloadArray);
 
-      console.log('RISPOSTA SUPABASE:', { data, error });
+      console.log('RISPOSTA SUPABASE:', { error });
 
       if (error) throw error;
 
-      // Aggiorna lo storico per la dashboard con la/e scommessa/e appena inserita/e
-      const nuoveDashboard = scommesse.map((s, i) => ({
-        id_scommessa: data?.[i]?.id_scommessa ?? data?.[i]?.id ?? `tmp-${i}`,
+      // Aggiorna lo storico per la dashboard dai dati locali (non rileggiamo dal DB).
+      const nuoveDashboard = scommesse.map((s) => ({
+        id_scommessa: `nuova-${s.num_serata}`,
         num_serata: s.num_serata,
         azione_scelta: s.azione,
         punti: s.punti,

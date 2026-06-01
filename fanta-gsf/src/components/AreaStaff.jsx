@@ -86,32 +86,19 @@ const AreaStaff = () => {
     setIsLoading(true);
     setFeedback(null);
     try {
-      // Query con JOIN sulle tabelle squadre e giudici (FK configurate su Supabase:
-      // squadra_id -> squadre.id_squadra, giudice_id -> giudici.id_giudice)
-      const { data, error } = await supabase
-        .from('scommesse_del_capitano')
-        .select(`
-          id_scommessa,
-          squadra_id,
-          giudice_id,
-          azione_scelta,
-          punti,
-          indovinata,
-          validata_il,
-          piazzata_il,
-          squadre!squadra_id ( nome ),
-          giudici!giudice_id ( nome )
-        `)
-        .order('piazzata_il', { ascending: false });
-        
+      // Lettura BLINDATA: solo via RPC SECURITY DEFINER con PIN (zero-trust).
+      // La SELECT diretta sulla tabella è ora negata dalla RLS.
+      const { data, error } = await supabase.rpc('get_scommesse_staff', {
+        p_pin: pinSalvato,
+      });
+
       if (error) throw error;
 
-      // Flatten dei dati joinati per semplificare il rendering.
-      // Niente più placeholder "Squadra ID: X" — usiamo i nomi reali dalle JOIN.
+      // La RPC restituisce già una struttura PIATTA (nome_squadra/nome_giudice inclusi).
       const scommesseFlatten = (data || []).map(s => ({
         ...s,
-        nome_squadra: s.squadre?.nome || '—',
-        nome_giudice: s.giudici?.nome || '—',
+        nome_squadra: s.nome_squadra || '—',
+        nome_giudice: s.nome_giudice || '—',
       }));
 
       setScommesse(scommesseFlatten);
@@ -121,7 +108,7 @@ const AreaStaff = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [pinSalvato]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

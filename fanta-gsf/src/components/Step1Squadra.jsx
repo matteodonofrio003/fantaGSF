@@ -55,26 +55,20 @@ const Step1Squadra = ({
       setSerataCorrente(serata);
 
       // 2) Carica TUTTE le scommesse della squadra (servono comunque alla dashboard).
-      //    Join sul giudice (FK giudice_id -> giudici.id_giudice) per il nome.
+      //    Lettura BLINDATA: solo via RPC SECURITY DEFINER con PIN (zero-trust).
+      //    La RPC verifica il pin_accesso della squadra e restituisce dati piatti
+      //    (nome_giudice già incluso).
       const { data: scommesseDb, error: scommesseErr } = await supabase
-        .from('scommesse_del_capitano')
-        .select(`
-          id_scommessa,
-          num_serata,
-          azione_scelta,
-          punti,
-          indovinata,
-          giudice_id,
-          giudici!giudice_id ( nome )
-        `)
-        .eq('squadra_id', Number(selectedSquadra))
-        .order('num_serata', { ascending: true });
+        .rpc('get_scommesse_squadra', {
+          p_squadra_id: Number(selectedSquadra),
+          p_pin: pinCapitano,
+        });
 
       if (scommesseErr) throw scommesseErr;
 
       const flatten = (scommesseDb || []).map(s => ({
         ...s,
-        nome_giudice: s.giudici?.nome || '—',
+        nome_giudice: s.nome_giudice || '—',
       }));
       setScommesseGiaEffettuate(flatten);
 
