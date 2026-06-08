@@ -10,10 +10,12 @@ import {
   XCircle,
   RotateCcw,
   Lock,
+  Unlock,
   Eye,
   EyeOff,
   CalendarClock,
   Save,
+  Sparkles,
 } from 'lucide-react';
 
 const AreaStaff = () => {
@@ -39,6 +41,10 @@ const AreaStaff = () => {
   const [dataInizioInput, setDataInizioInput] = useState(''); // YYYY-MM-DD
   const [overrideInput, setOverrideInput] = useState('');     // '' = automatica, '1'..'5' = forzata
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // --- SVELAMENTO FINALE (master switch pubblico) ---
+  const [svelamentoAttivo, setSvelamentoAttivo] = useState(false);
+  const [svelamentoLoading, setSvelamentoLoading] = useState(false);
 
   const fetchSerataConfig = useCallback(async () => {
     try {
@@ -79,6 +85,51 @@ const AreaStaff = () => {
       setFeedback({ type: 'error', text: 'Errore di rete durante il salvataggio.' });
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const fetchStatoSvelamento = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_stato_svelamento');
+      if (error) throw error;
+      setSvelamentoAttivo(Boolean(data?.attivo));
+    } catch (err) {
+      console.error('Errore lettura stato svelamento:', err);
+    }
+  }, []);
+
+  const toggleSvelamento = async () => {
+    const nuovoStato = !svelamentoAttivo;
+    setSvelamentoLoading(true);
+    setFeedback(null);
+    try {
+      const { data, error } = await supabase.rpc('toggle_svelamento', {
+        p_pin: pinSalvato,
+        p_stato: nuovoStato,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setSvelamentoAttivo(Boolean(data.svelamento_attivo));
+        setFeedback({
+          type: 'success',
+          text: nuovoStato
+            ? '🎉 Svelamento Finale ATTIVATO: lo storico è ora pubblico!'
+            : 'Svelamento Finale disattivato: i segreti sono di nuovo sigillati.',
+        });
+      } else {
+        if (data?.error?.includes('PIN')) {
+          setIsAutenticato(false);
+          setPinSalvato('');
+        }
+        setFeedback({ type: 'error', text: data?.error || 'Errore nel cambio di stato.' });
+      }
+    } catch (err) {
+      console.error('Errore toggle svelamento:', err);
+      setFeedback({ type: 'error', text: 'Errore di rete durante il cambio di stato.' });
+    } finally {
+      setSvelamentoLoading(false);
     }
   };
 
@@ -140,8 +191,9 @@ const AreaStaff = () => {
     if (isAutenticato) {
       fetchScommesse();
       fetchSerataConfig();
+      fetchStatoSvelamento();
     }
-  }, [isAutenticato, fetchScommesse, fetchSerataConfig]);
+  }, [isAutenticato, fetchScommesse, fetchSerataConfig, fetchStatoSvelamento]);
 
   const validaScommessa = async (idScommessa, indovinata) => {
     setActionLoading(prev => ({ ...prev, [idScommessa]: true }));
@@ -410,6 +462,65 @@ const AreaStaff = () => {
             >
               {savingConfig ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
               Salva
+            </button>
+          </div>
+        </div>
+
+        {/* SVELAMENTO FINALE — Master Switch pubblico (gran finale) */}
+        <div className={`mb-6 rounded-2xl p-5 border transition-all ${
+          svelamentoAttivo
+            ? 'bg-gradient-to-br from-emerald-900/40 to-teal-900/20 border-emerald-500/50 shadow-lg shadow-emerald-900/30'
+            : 'bg-slate-800 border-slate-700'
+        }`}>
+          <div className="flex items-center gap-2 mb-1.5">
+            {svelamentoAttivo
+              ? <Unlock className="text-emerald-400" size={20} />
+              : <Lock className="text-amber-400" size={20} />}
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">Svelamento Finale</h2>
+            <span className={`ml-2 inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border ${
+              svelamentoAttivo
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                : 'bg-slate-900 text-slate-400 border-slate-600'
+            }`}>
+              {svelamentoAttivo ? <><Sparkles size={11} /> ATTIVO — PUBBLICO</> : 'SIGILLATO'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 leading-snug max-w-2xl">
+            Sblocca la schermata pubblica che mostra a tutti lo storico completo delle scommesse di ogni squadra.
+            Attivalo solo a fine evento per il gran finale.
+          </p>
+
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <a
+              href="#/svelamento"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white transition-colors"
+              title="Apri l'anteprima dello svelamento in una nuova scheda"
+            >
+              <Eye size={15} /> Anteprima schermata
+            </a>
+
+            {/* Toggle prominente */}
+            <button
+              onClick={toggleSvelamento}
+              disabled={svelamentoLoading}
+              role="switch"
+              aria-checked={svelamentoAttivo}
+              className={`group relative flex items-center gap-3 pl-4 pr-2 py-2 rounded-full font-black uppercase tracking-wider text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                svelamentoAttivo
+                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/30 hover:bg-emerald-400'
+                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+              }`}
+            >
+              {svelamentoLoading
+                ? <Loader2 className="animate-spin" size={16} />
+                : <span>{svelamentoAttivo ? 'Attivo' : 'Disattivo'}</span>}
+              <span className={`flex items-center w-12 h-7 rounded-full p-1 transition-all ${
+                svelamentoAttivo ? 'bg-emerald-900/50 justify-end' : 'bg-slate-900 justify-start'
+              }`}>
+                <span className="w-5 h-5 rounded-full bg-white shadow" />
+              </span>
             </button>
           </div>
         </div>

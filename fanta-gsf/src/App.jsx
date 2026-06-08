@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Lock,
   Sparkles,
+  Eye,
 } from 'lucide-react';
 
 // --- Componenti estratti ---
@@ -17,6 +18,7 @@ import AnteprimaSidebar from './components/AnteprimaSidebar';
 import AreaStaff from './components/AreaStaff';
 import DashboardCapitano from './components/DashboardCapitano';
 import Classifica from './components/Classifica';
+import SvelamentoFinale from './components/SvelamentoFinale';
 
 // Palette ripresa dalle macchie del logo (rosso, arancio, giallo, verde, blu, viola)
 const RAINBOW = 'linear-gradient(to right, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #a855f7)';
@@ -82,6 +84,24 @@ export default function App() {
   // scommesseGiaEffettuate: tutte le scommesse della squadra, lette dal DB.
   const [scommesseGiaEffettuate, setScommesseGiaEffettuate] = useState([]);
 
+  // --- SVELAMENTO FINALE ---
+  // Flag globale per illuminare il bottone in header quando la regia ha sbloccato.
+  const [svelamentoAttivo, setSvelamentoAttivo] = useState(false);
+
+  // Rilegge lo stato dello svelamento ad ogni cambio rotta (glow header sempre fresco).
+  useEffect(() => {
+    const fetchStatoSvelamento = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_stato_svelamento');
+        if (error) throw error;
+        setSvelamentoAttivo(Boolean(data?.attivo));
+      } catch (err) {
+        console.error('Errore lettura stato svelamento:', err);
+      }
+    };
+    fetchStatoSvelamento();
+  }, [currentRoute]);
+
   // Fetch di tutti i dati all'avvio: giudici, squadre, calendario serate e bonus/malus
   useEffect(() => {
     const fetchData = async () => {
@@ -121,6 +141,11 @@ export default function App() {
   // Rotta pubblica: classifica generale (nessun login richiesto)
   if (currentRoute === '#/classifica') {
     return <Classifica />;
+  }
+
+  // Rotta pubblica: svelamento finale (gated server-side dal flag svelamento_attivo)
+  if (currentRoute === '#/svelamento') {
+    return <SvelamentoFinale />;
   }
 
   // Ricava l'oggetto completo della squadra selezionata per l'anteprima
@@ -271,6 +296,22 @@ export default function App() {
             >
               <Trophy size={18} className="group-hover:rotate-12 transition-transform" />
               <span className="hidden sm:inline text-sm">Classifica</span>
+            </a>
+            {/* Svelamento Finale — si illumina quando la regia ha sbloccato */}
+            <a
+              href="#/svelamento"
+              className={`group relative flex items-center gap-1.5 pl-3 pr-4 py-2.5 rounded-full font-black transition-all hover:-translate-y-0.5 hover:scale-105 active:scale-95 ${
+                svelamentoAttivo
+                  ? 'bg-gradient-to-tr from-fuchsia-500 to-purple-600 text-white shadow-lg shadow-fuchsia-400/60 animate-pulse'
+                  : 'bg-slate-100 text-slate-400 shadow-sm hover:bg-slate-200'
+              }`}
+              title={svelamentoAttivo ? 'Svelamento Finale — SBLOCCATO!' : 'Svelamento Finale (in arrivo)'}
+            >
+              {svelamentoAttivo && (
+                <span aria-hidden className="absolute -inset-0.5 rounded-full bg-fuchsia-500/40 blur-md -z-10" />
+              )}
+              <Eye size={18} className="group-hover:rotate-12 transition-transform" />
+              <span className="hidden sm:inline text-sm">Svelamento</span>
             </a>
             {/* Icona accesso Area Staff */}
             <a
