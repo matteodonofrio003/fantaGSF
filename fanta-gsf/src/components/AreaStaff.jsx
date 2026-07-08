@@ -46,6 +46,10 @@ const AreaStaff = () => {
   const [svelamentoAttivo, setSvelamentoAttivo] = useState(false);
   const [svelamentoLoading, setSvelamentoLoading] = useState(false);
 
+  // --- CLASSIFICA PUBBLICA (master switch pubblico) ---
+  const [classificaPubblica, setClassificaPubblica] = useState(false);
+  const [classificaPubblicaLoading, setClassificaPubblicaLoading] = useState(false);
+
   const fetchSerataConfig = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_serata_corrente');
@@ -161,6 +165,51 @@ const AreaStaff = () => {
     }
   }, [pinSalvato]);
 
+  const fetchStatoClassificaPubblica = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_stato_classifica_pubblica');
+      if (error) throw error;
+      setClassificaPubblica(Boolean(data?.attivo));
+    } catch (err) {
+      console.error('Errore lettura stato classifica pubblica:', err);
+    }
+  }, []);
+
+  const toggleClassificaPubblica = async () => {
+    const nuovoStato = !classificaPubblica;
+    setClassificaPubblicaLoading(true);
+    setFeedback(null);
+    try {
+      const { data, error } = await supabase.rpc('toggle_classifica_pubblica', {
+        p_pin: pinSalvato,
+        p_stato: nuovoStato,
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setClassificaPubblica(Boolean(data.classifica_pubblica));
+        setFeedback({
+          type: 'success',
+          text: nuovoStato
+            ? 'Classifica Pubblica ATTIVATA: la classifica e visibile a tutti!'
+            : 'Classifica Pubblica disattivata: la classifica e di nuovo nascosta.',
+        });
+      } else {
+        if (data?.error?.includes('PIN')) {
+          setIsAutenticato(false);
+          setPinSalvato('');
+        }
+        setFeedback({ type: 'error', text: data?.error || 'Errore nel cambio di stato.' });
+      }
+    } catch (err) {
+      console.error('Errore toggle classifica pubblica:', err);
+      setFeedback({ type: 'error', text: 'Errore di rete durante il cambio di stato.' });
+    } finally {
+      setClassificaPubblicaLoading(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!pin.trim()) return;
@@ -192,8 +241,9 @@ const AreaStaff = () => {
       fetchScommesse();
       fetchSerataConfig();
       fetchStatoSvelamento();
+      fetchStatoClassificaPubblica();
     }
-  }, [isAutenticato, fetchScommesse, fetchSerataConfig, fetchStatoSvelamento]);
+  }, [isAutenticato, fetchScommesse, fetchSerataConfig, fetchStatoSvelamento, fetchStatoClassificaPubblica]);
 
   const validaScommessa = async (idScommessa, indovinata) => {
     setActionLoading(prev => ({ ...prev, [idScommessa]: true }));
@@ -518,6 +568,64 @@ const AreaStaff = () => {
                 : <span>{svelamentoAttivo ? 'Attivo' : 'Disattivo'}</span>}
               <span className={`flex items-center w-12 h-7 rounded-full p-1 transition-all ${
                 svelamentoAttivo ? 'bg-emerald-900/50 justify-end' : 'bg-slate-900 justify-start'
+              }`}>
+                <span className="w-5 h-5 rounded-full bg-white shadow" />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* CLASSIFICA PUBBLICA — Master Switch (visibile a tutti, anche prima della Serata 5) */}
+        <div className={`mb-6 rounded-2xl p-5 border transition-all ${
+          classificaPubblica
+            ? 'bg-gradient-to-br from-blue-900/40 to-violet-900/20 border-blue-500/50 shadow-lg shadow-blue-900/30'
+            : 'bg-slate-800 border-slate-700'
+        }`}>
+          <div className="flex items-center gap-2 mb-1.5">
+            {classificaPubblica
+              ? <Unlock className="text-blue-400" size={20} />
+              : <Lock className="text-amber-400" size={20} />}
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">Classifica Pubblica</h2>
+            <span className={`ml-2 inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border ${
+              classificaPubblica
+                ? 'bg-blue-500/20 text-blue-300 border-blue-400/40'
+                : 'bg-slate-900 text-slate-400 border-slate-600'
+            }`}>
+              {classificaPubblica ? <><Sparkles size={11} /> VISIBILE</> : 'NASCOSTA'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 leading-snug max-w-2xl">
+            Rende la classifica generale visibile a tutti in qualsiasi momento, anche prima della Serata 5.
+            Disattivalo per nascondere nuovamente la classifica.
+          </p>
+
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <a
+              href="#/classifica"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-300 hover:text-white transition-colors"
+              title="Apri la classifica in una nuova scheda"
+            >
+              <Eye size={15} /> Anteprima classifica
+            </a>
+
+            <button
+              onClick={toggleClassificaPubblica}
+              disabled={classificaPubblicaLoading}
+              role="switch"
+              aria-checked={classificaPubblica}
+              className={`group relative flex items-center gap-3 pl-4 pr-2 py-2 rounded-full font-black uppercase tracking-wider text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                classificaPubblica
+                  ? 'bg-blue-500 text-slate-900 shadow-lg shadow-blue-500/30 hover:bg-blue-400'
+                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+              }`}
+            >
+              {classificaPubblicaLoading
+                ? <Loader2 className="animate-spin" size={16} />
+                : <span>{classificaPubblica ? 'Attivo' : 'Disattivo'}</span>}
+              <span className={`flex items-center w-12 h-7 rounded-full p-1 transition-all ${
+                classificaPubblica ? 'bg-blue-900/50 justify-end' : 'bg-slate-900 justify-start'
               }`}>
                 <span className="w-5 h-5 rounded-full bg-white shadow" />
               </span>
