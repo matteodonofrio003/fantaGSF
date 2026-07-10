@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Users, ChevronRight, Loader2, CalendarClock, Star, ListChecks, ShieldCheck } from 'lucide-react';
+import { Users, ChevronRight, Loader2, CalendarClock, Star, ListChecks, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 const Step3Scommesse = ({
   giudiciDb = [],
@@ -11,6 +11,7 @@ const Step3Scommesse = ({
   setStepAttuale,
 }) => {
   const [azioni, setAzioni] = useState([]);
+  const [malus, setMalus] = useState([]);
   const [isLoadingAzioni, setIsLoadingAzioni] = useState(true);
 
   const [g1, setG1] = useState('');
@@ -38,6 +39,20 @@ const Step3Scommesse = ({
       }
     };
     fetchAzioni();
+    // Fetch malus
+    const fetchMalus = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_malus_serata', {
+          p_serata: serataCorrente,
+        });
+        if (error) throw error;
+        setMalus(data || []);
+      } catch (err) {
+        console.error('Errore fetch malus serata:', err);
+        setMalus([]);
+      }
+    };
+    fetchMalus();
   }, [serataCorrente]);
 
   const aggiornaGlobale = (nuovoG1, nuovoG2, nuovoG3) => {
@@ -166,6 +181,35 @@ const Step3Scommesse = ({
                     </span>
                     <span className="text-sm font-semibold text-gray-700 truncate">
                       {a.descrizione}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 5 Malus della serata (read-only) */}
+          <div className="shrink-0">
+            <h5 className="text-xs font-black uppercase tracking-widest text-red-400 mb-2 flex items-center gap-1.5">
+              <AlertTriangle size={14} />
+              I 5 malus della serata
+            </h5>
+            {malus.length === 0 ? (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-bold text-center">
+                La regia non ha ancora configurato i malus per questa serata.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5 max-h-24 overflow-y-auto pr-1">
+                {malus.map((m, idx) => (
+                  <div
+                    key={m.id || idx}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-xl"
+                  >
+                    <span className="w-6 h-6 rounded-lg bg-red-100 text-red-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="text-sm font-semibold text-red-700 truncate">
+                      {m.descrizione}
                     </span>
                   </div>
                 ))}

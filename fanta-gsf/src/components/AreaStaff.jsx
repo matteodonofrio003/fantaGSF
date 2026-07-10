@@ -55,9 +55,14 @@ const AreaStaff = () => {
   const [azioniInputs, setAzioniInputs] = useState(Array(10).fill(''));
   const [azioniLoading, setAzioniLoading] = useState(false);
 
+  // --- CONFIGURAZIONE MALUS SERATA (5 malus per serata) ---
+  const [malusInputs, setMalusInputs] = useState(Array(5).fill(''));
+  const [malusLoading, setMalusLoading] = useState(false);
+
   // --- CALCOLO RISULTATI GIUDICI ---
   const [giudiciList, setGiudiciList] = useState([]);
-  const [risultatiGiudici, setRisultatiGiudici] = useState({});
+  const [bonusGiudici, setBonusGiudici] = useState({});
+  const [malusGiudici, setMalusGiudici] = useState({});
   const [calcoloLoading, setCalcoloLoading] = useState(false);
 
   const fetchGiudici = async () => {
@@ -119,6 +124,54 @@ const AreaStaff = () => {
     }
   };
 
+  const fetchMalusSerata = useCallback(async (serata) => {
+    if (!serata) return;
+    try {
+      const { data, error } = await supabase.rpc('get_malus_serata', { p_serata: serata });
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setMalusInputs(data.map(m => m.descrizione).concat(Array(5 - data.length).fill('')));
+      } else {
+        setMalusInputs(Array(5).fill(''));
+      }
+    } catch (err) {
+      console.error('Errore fetch malus serata:', err);
+    }
+  }, []);
+
+  const salvaMalus = async () => {
+    const serata = serataConfig?.serata;
+    if (!serata) {
+      setFeedback({ type: 'error', text: 'Nessuna serata in corso. Impossibile salvare i malus.' });
+      return;
+    }
+    setMalusLoading(true);
+    setFeedback(null);
+    try {
+      const malusValidi = malusInputs.filter(m => m.trim() !== '');
+      if (malusValidi.length !== 5) {
+        setFeedback({ type: 'error', text: 'Devi inserire esattamente 5 malus.' });
+        return;
+      }
+      const { data, error } = await supabase.rpc('salva_malus_serata', {
+        p_pin: pinSalvato,
+        p_serata: serata,
+        p_malus: malusValidi,
+      });
+      if (error) throw error;
+      if (data?.success) {
+        setFeedback({ type: 'success', text: `5 malus salvati per la Serata ${serata}.` });
+      } else {
+        setFeedback({ type: 'error', text: data?.error || 'Errore nel salvataggio.' });
+      }
+    } catch (err) {
+      console.error('Errore salvataggio malus:', err);
+      setFeedback({ type: 'error', text: 'Errore di rete durante il salvataggio.' });
+    } finally {
+      setMalusLoading(false);
+    }
+  };
+
   const calcolaPunteggi = async () => {
     const serata = serataConfig?.serata;
     if (!serata) {
@@ -142,10 +195,11 @@ const AreaStaff = () => {
         for (const n of [1, 2, 3]) {
           const gid = s[`giudice_${n}_id`];
           if (gid == null) continue;
-          const azioni = Number(risultatiGiudici[gid]) || 0;
+          const bonus = Number(bonusGiudici[gid]) || 0;
+          const malus = Number(malusGiudici[gid]) || 0;
           const giudice = giudiciList.find(g => g.id_giudice === gid);
           const base = giudice?.punteggio_base || 0;
-          punteggio += azioni * base;
+          punteggio += (bonus - malus) * base;
         }
 
         // Aggiorna nel DB
@@ -172,10 +226,11 @@ const AreaStaff = () => {
         for (const n of [1, 2, 3]) {
           const gid = s[`giudice_${n}_id`];
           if (gid == null) continue;
-          const azioni = Number(risultatiGiudici[gid]) || 0;
+          const bonus = Number(bonusGiudici[gid]) || 0;
+          const malus = Number(malusGiudici[gid]) || 0;
           const giudice = giudiciList.find(g => g.id_giudice === gid);
           const base = giudice?.punteggio_base || 0;
-          punteggio += azioni * base;
+          punteggio += (bonus - malus) * base;
         }
         return { ...s, punteggio_ottenuto: punteggio };
       }));
@@ -390,16 +445,19 @@ const AreaStaff = () => {
   useEffect(() => {
     if (serataConfig?.serata) {
       fetchAzioniSerata(serataConfig.serata);
+      fetchMalusSerata(serataConfig.serata);
     }
-  }, [serataConfig, fetchAzioniSerata]);
+  }, [serataConfig, fetchAzioniSerata, fetchMalusSerata]);
 
   useEffect(() => {
     if (isAutenticato) {
       fetchGiudici().then(giudici => {
         setGiudiciList(giudici);
-        const init = {};
-        giudici.forEach(g => { init[g.id_giudice] = ''; });
-        setRisultatiGiudici(init);
+        const bInit = {};
+        const mInit = {};
+        giudici.forEach(g => { bInit[g.id_giudice] = ''; mInit[g.id_giudice] = ''; });
+        setBonusGiudici(bInit);
+        setMalusGiudici(mInit);
       });
     }
   }, [isAutenticato]);
@@ -757,6 +815,50 @@ const AreaStaff = () => {
           </button>
         </div>
 
+        {/* CONFIGURA 5 MALUS DELLA SERATA */}
+        <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <ListChecks className="text-red-400" size={20} />
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">
+              Configura 5 Malus — Serata {serataConfig?.serata || '?'}
+            </h2>
+            <span className="ml-auto text-[10px] font-bold text-slate-500 uppercase">
+              {malusInputs.filter(m => m.trim() !== '').length}/5
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">
+            Inserisci esattamente 5 malus. Se un giudice compie un malus, il punteggio viene ridotto: (bonus - malus) x punteggio base.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {malusInputs.map((val, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-red-900/30 border border-red-800/40 flex items-center justify-center text-xs font-black text-red-400 shrink-0">
+                  {idx + 1}
+                </span>
+                <input
+                  type="text"
+                  value={val}
+                  onChange={(e) => {
+                    const next = [...malusInputs];
+                    next[idx] = e.target.value;
+                    setMalusInputs(next);
+                  }}
+                  placeholder={`Malus ${idx + 1}...`}
+                  className="flex-1 p-2.5 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold text-sm focus:border-red-400 focus:ring-2 focus:ring-red-400/30 outline-none transition-all placeholder:text-slate-600"
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={salvaMalus}
+            disabled={malusLoading || !serataConfig?.serata}
+            className="mt-4 w-full py-2.5 bg-red-500 hover:bg-red-400 text-white font-black rounded-xl text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {malusLoading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+            Salva 5 Malus
+          </button>
+        </div>
+
         {/* PUNTEGGI BASE GIUDICI */}
         <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -812,34 +914,51 @@ const AreaStaff = () => {
             </h2>
           </div>
           <p className="text-xs text-slate-400 mb-4">
-            Per ogni giudice, indica quante delle 10 azioni ha effettivamente compiuto durante la serata.
-            Poi clicca "Calcola" per assegnare i punteggi alle squadre.
+            Per ogni giudice, indica <span className="text-green-400 font-bold">quanti bonus</span> e <span className="text-red-400 font-bold">quanti malus</span> ha compiuto.
+            Formula: <span className="text-amber-300 font-bold">(bonus - malus) x punteggio base</span>.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.keys(risultatiGiudici).map(gid => {
+          <div className="grid grid-cols-1 gap-3">
+            {Object.keys(bonusGiudici).map(gid => {
               const giudice = giudiciList.find(g => String(g.id_giudice) === String(gid));
               const nomeGiudice = giudice?.nome || gid;
               const puntiBase = giudice?.punteggio_base || 0;
               return (
-              <div key={gid} className="flex items-center gap-2 bg-slate-900/50 rounded-xl px-3 py-2.5 border border-slate-700">
-                <Users size={14} className="text-amber-400 shrink-0" />
-                <span className="text-sm font-bold text-slate-200 truncate flex-1">
+              <div key={gid} className="flex items-center gap-3 bg-slate-900/50 rounded-xl px-4 py-3 border border-slate-700">
+                <Users size={16} className="text-amber-400 shrink-0" />
+                <span className="text-sm font-bold text-slate-200 truncate flex-1 min-w-[100px]">
                   {nomeGiudice}
                   {puntiBase !== 0 && (
                     <span className="text-slate-500 text-[10px] ml-1">({puntiBase > 0 ? '+' : ''}{puntiBase} pt)</span>
                   )}
                 </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={risultatiGiudici[gid]}
-                  onChange={(e) =>
-                    setRisultatiGiudici(prev => ({ ...prev, [gid]: e.target.value }))
-                  }
-                  className="w-16 p-2 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold text-center focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all"
-                />
-                <span className="text-[10px] font-bold text-slate-500">/10</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-bold text-green-400 uppercase">Bonus</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={bonusGiudici[gid]}
+                    onChange={(e) =>
+                      setBonusGiudici(prev => ({ ...prev, [gid]: e.target.value }))
+                    }
+                    className="w-14 p-2 bg-slate-900 border-2 border-green-700 rounded-xl text-green-300 font-bold text-center focus:border-green-400 focus:ring-2 focus:ring-green-400/30 outline-none transition-all"
+                  />
+                  <span className="text-[10px] font-bold text-slate-500">/10</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-bold text-red-400 uppercase">Malus</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={malusGiudici[gid]}
+                    onChange={(e) =>
+                      setMalusGiudici(prev => ({ ...prev, [gid]: e.target.value }))
+                    }
+                    className="w-14 p-2 bg-slate-900 border-2 border-red-700 rounded-xl text-red-300 font-bold text-center focus:border-red-400 focus:ring-2 focus:ring-red-400/30 outline-none transition-all"
+                  />
+                  <span className="text-[10px] font-bold text-slate-500">/5</span>
+                </div>
               </div>
               );
             })}
