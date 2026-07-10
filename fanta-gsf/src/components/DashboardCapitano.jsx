@@ -1,7 +1,6 @@
 import React from 'react';
-import { Trophy, Clock, CheckCircle2, XCircle, Award, RefreshCcw, CalendarClock, Hourglass, Ban } from 'lucide-react';
+import { Trophy, Award, RefreshCcw, Users, Hash } from 'lucide-react';
 
-// Palette coerente con il calendario serate (Step2)
 const serataColors = [
   'from-rose-500 to-orange-500',
   'from-amber-500 to-yellow-500',
@@ -10,76 +9,53 @@ const serataColors = [
   'from-emerald-500 to-teal-500',
 ];
 
-// Punti effettivamente ottenuti da una scommessa GIÀ validata.
-//  indovinata === true  → incassa i punti in palio
-//  indovinata === false → 0 (la scommessa è fallita)
-//  indovinata === null  → ancora in attesa (non conteggiata)
-const puntiOttenuti = (s) => {
-  if (s.indovinata === true) return s.punti;
-  if (s.indovinata === false) return 0;
-  return null;
-};
-
-// Badge di stato di una scommessa GIOCATA, in base al campo `indovinata`
-const StatoBadge = ({ indovinata }) => {
-  if (indovinata === null || indovinata === undefined) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
-        <Clock size={12} /> In attesa
-      </span>
-    );
-  }
-  if (indovinata === true) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">
-        <CheckCircle2 size={12} /> Indovinata
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">
-      <XCircle size={12} /> Fallita
-    </span>
-  );
-};
-
-// --- DASHBOARD CAPITANO (read-only) ---
-// Mostrata dopo il login quando il capitano NON può scommettere ora:
-//   • ha già giocato la serata in corso, oppure
-//   • nessuna serata è aperta.
-// Riceve l'array delle scommesse dal DB, l'oggetto squadra e la serata in corso.
 const DashboardCapitano = ({ scommesse = [], squadra, serataCorrente = null, onCambiaSquadra }) => {
-  // Conteggi di sintesi
-  const validate = scommesse.filter(s => s.indovinata !== null && s.indovinata !== undefined);
-  const indovinate = scommesse.filter(s => s.indovinata === true).length;
-  const fallite = scommesse.filter(s => s.indovinata === false).length;
   const giocate = scommesse.length;
+  const calcolate = scommesse.filter(s => s.punteggio_ottenuto > 0).length;
+  const totalePunti = scommesse.reduce((acc, s) => acc + (s.punteggio_ottenuto || 0), 0);
 
-  // Totale parziale: somma dei punti delle sole scommesse VALIDATE
-  const totalePunti = validate.reduce((acc, s) => acc + (puntiOttenuti(s) || 0), 0);
-
-  // Banner contestuale in cima alla dashboard
   const haGiocatoCorrente = serataCorrente != null && scommesse.some(s => s.num_serata === serataCorrente);
   let banner;
   if (serataCorrente == null) {
     banner = {
       tono: 'neutro',
       titolo: 'Nessuna serata aperta',
-      testo: 'Al momento non ci sono serate attive. Torna quando la prossima serata sarà aperta!',
+      testo: 'Al momento non ci sono serate attive. Torna quando la prossima serata sara aperta!',
     };
   } else if (haGiocatoCorrente) {
     banner = {
       tono: 'ok',
       titolo: `Scommessa della Serata ${serataCorrente} registrata`,
       testo: serataCorrente < 5
-        ? 'Hai già giocato per stasera. Torna domani per la prossima serata!'
-        : 'Hai giocato l’ultima serata. In bocca al lupo per il Gran Finale!',
+        ? 'Hai gia scelto i tuoi 3 giudici per stasera. Torna domani per la prossima serata!'
+        : 'Hai scelto i giudici per l\'ultima serata. In bocca al lupo per il Gran Finale!',
     };
   }
 
+  const GiudiciScelti = ({ s }) => {
+    if (!s.giudice_1_id && !s.giudice_2_id && !s.giudice_3_id) return null;
+    return (
+      <div className="flex flex-wrap gap-1.5 mt-1.5">
+        {[1, 2, 3].map(n => {
+          const nome = s[`giudice_${n}_nome`];
+          const punti = s[`giudice_${n}_punti`];
+          if (!nome) return null;
+          return (
+            <span
+              key={n}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100"
+            >
+              {nome}
+              <span className="text-blue-400">({punti > 0 ? '+' : ''}{punti || 0})</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 max-w-3xl mx-auto">
-
       {/* HERO — intestazione squadra + punteggio parziale */}
       <div className="bg-gradient-to-br from-blue-600 to-indigo-800 rounded-[2rem] shadow-xl p-1.5 mb-6">
         <div className="bg-white/95 backdrop-blur-sm rounded-[1.6rem] p-6 sm:p-8 relative overflow-hidden">
@@ -123,16 +99,16 @@ const DashboardCapitano = ({ scommesse = [], squadra, serataCorrente = null, onC
           {/* Mini-riepilogo conteggi */}
           <div className="grid grid-cols-3 gap-2 mt-6 relative">
             <div className="bg-green-50 border border-green-100 rounded-xl py-2 text-center">
-              <p className="text-xl font-black text-green-600 leading-none">{indovinate}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-green-500 mt-1">Indovinate</p>
+              <p className="text-xl font-black text-green-600 leading-none">{calcolate}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-green-500 mt-1">Calcolate</p>
             </div>
-            <div className="bg-red-50 border border-red-100 rounded-xl py-2 text-center">
-              <p className="text-xl font-black text-red-600 leading-none">{fallite}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 mt-1">Fallite</p>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl py-2 text-center">
+              <p className="text-xl font-black text-blue-600 leading-none">{giocate}/5</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500 mt-1">Giocate</p>
             </div>
-            <div className="bg-gray-50 border border-gray-100 rounded-xl py-2 text-center">
-              <p className="text-xl font-black text-gray-500 leading-none">{giocate}/5</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-1">Giocate</p>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl py-2 text-center">
+              <p className="text-xl font-black text-amber-600 leading-none">{giocate - calcolate}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mt-1">In attesa</p>
             </div>
           </div>
         </div>
@@ -145,7 +121,7 @@ const DashboardCapitano = ({ scommesse = [], squadra, serataCorrente = null, onC
             ? 'bg-green-50 border-green-200 text-green-800'
             : 'bg-amber-50 border-amber-200 text-amber-800'
         }`}>
-          {banner.tono === 'ok' ? <CheckCircle2 size={20} className="shrink-0 mt-0.5" /> : <CalendarClock size={20} className="shrink-0 mt-0.5" />}
+          <Hash size={20} className="shrink-0 mt-0.5" />
           <div>
             <p className="font-black">{banner.titolo}</p>
             <p className="text-sm font-medium opacity-90">{banner.testo}</p>
@@ -157,9 +133,8 @@ const DashboardCapitano = ({ scommesse = [], squadra, serataCorrente = null, onC
       <div className="space-y-3">
         {[1, 2, 3, 4, 5].map((num, idx) => {
           const s = scommesse.find(x => x.num_serata === num);
-          const ottenuti = s ? puntiOttenuti(s) : null;
+          const ottenuto = s ? (s.punteggio_ottenuto || 0) : null;
 
-          // Stato di una serata NON giocata, relativo alla serata in corso
           const isCorrente = serataCorrente === num;
           const isFutura = serataCorrente != null && num > serataCorrente;
           const isPersa = serataCorrente != null && num < serataCorrente && !s;
@@ -182,42 +157,50 @@ const DashboardCapitano = ({ scommesse = [], squadra, serataCorrente = null, onC
                 {s ? (
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{s.nome_giudice || '—'}</p>
-                      <p className="text-sm font-bold text-gray-800 truncate">"{s.azione_scelta}"</p>
-                      <div className="mt-2">
-                        <StatoBadge indovinata={s.indovinata} />
-                      </div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                        <Users size={12} /> 3 giudici scelti
+                      </p>
+                      <GiudiciScelti s={s} />
+                      {s.punteggio_ottenuto > 0 ? (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">
+                            Punteggio calcolato
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                            In attesa di calcolo
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-right shrink-0">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        {s.indovinata === null || s.indovinata === undefined ? 'In palio' : 'Ottenuti'}
+                        {s.punteggio_ottenuto > 0 ? 'Ottenuti' : 'Da calcolare'}
                       </p>
                       <p className={`text-2xl font-black leading-none ${
-                        ottenuti === null
-                          ? 'text-gray-400'
-                          : ottenuti > 0
-                            ? 'text-green-600'
-                            : 'text-gray-400'
+                        s.punteggio_ottenuto > 0
+                          ? 'text-green-600'
+                          : 'text-gray-400'
                       }`}>
-                        {ottenuti === null
-                          ? `${s.punti >= 0 ? '+' : ''}${s.punti}`
-                          : `${ottenuti > 0 ? '+' : ''}${ottenuti}`}
+                        {s.punteggio_ottenuto > 0 ? '+' : ''}{ottenuto}
                         <span className="text-sm font-bold"> pt</span>
                       </p>
                     </div>
                   </div>
                 ) : isCorrente ? (
                   <div className="h-full flex items-center gap-2 text-sm font-bold text-blue-600">
-                    <CalendarClock size={16} /> Serata aperta — la tua scommessa ti aspetta
+                    <Users size={16} /> Serata aperta — scegli i tuoi 3 giudici
                   </div>
                 ) : isFutura ? (
                   <div className="h-full flex items-center gap-2 text-sm font-bold text-gray-400">
-                    <Hourglass size={16} /> Non ancora aperta
+                    Non ancora aperta
                   </div>
                 ) : isPersa ? (
                   <div className="h-full flex items-center gap-2 text-sm font-bold text-gray-400">
-                    <Ban size={16} /> Serata non giocata
+                    Serata non giocata
                   </div>
                 ) : (
                   <div className="h-full flex items-center text-sm font-bold text-gray-300 italic">

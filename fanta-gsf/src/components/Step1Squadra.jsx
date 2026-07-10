@@ -24,6 +24,7 @@ const Step1Squadra = ({
   setSerataCorrente,           // numero serata in corso (o null)
   setMostraDashboard,          // true → mostra la Dashboard invece del wizard
   setScommesseGiaEffettuate,   // tutte le scommesse della squadra (per la dashboard)
+  setCredenziale,              // salva il segreto (PIN/OTP o password) per submit RPC
 }) => {
   // --- Stato del flusso: 'login' (default) | 'setup' (primo accesso) ---
   const [fase, setFase] = useState('login');
@@ -55,8 +56,9 @@ const Step1Squadra = ({
   // `credenziale` è il segreto valido da passare alle RPC blindate
   // (la password personale appena usata/impostata, oppure il PIN per squadre legacy).
   const proseguiNellApp = async (credenziale) => {
-    // Login/setup riuscito → segna come autenticato
+    // Login/setup riuscito → segna come autenticato e salva la credenziale
     setIsCapitanoAutenticato(true);
+    setCredenziale(credenziale);
 
     // 1) Qual è la serata in corso? (modello ibrido: data + override staff)
     const { data: serataData, error: serataErr } = await supabase.rpc('get_serata_corrente');

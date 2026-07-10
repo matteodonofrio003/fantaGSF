@@ -8,7 +8,6 @@ import {
   LogOut,
   CheckCircle2,
   XCircle,
-  RotateCcw,
   Lock,
   Unlock,
   Eye,
@@ -16,6 +15,9 @@ import {
   CalendarClock,
   Save,
   Sparkles,
+  ListChecks,
+  Calculator,
+  Users,
 } from 'lucide-react';
 
 const AreaStaff = () => {
@@ -30,7 +32,6 @@ const AreaStaff = () => {
   // --- STATI DATI ---
   const [scommesse, setScommesse] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState({});
   const [feedback, setFeedback] = useState(null);
 
   // --- FILTRO ---
@@ -49,6 +50,147 @@ const AreaStaff = () => {
   // --- CLASSIFICA PUBBLICA (master switch pubblico) ---
   const [classificaPubblica, setClassificaPubblica] = useState(false);
   const [classificaPubblicaLoading, setClassificaPubblicaLoading] = useState(false);
+
+  // --- CONFIGURAZIONE AZIONI SERATA (10 azioni per serata) ---
+  const [azioniInputs, setAzioniInputs] = useState(Array(10).fill(''));
+  const [azioniLoading, setAzioniLoading] = useState(false);
+
+  // --- CALCOLO RISULTATI GIUDICI ---
+  const [giudiciList, setGiudiciList] = useState([]);
+  const [risultatiGiudici, setRisultatiGiudici] = useState({});
+  const [calcoloLoading, setCalcoloLoading] = useState(false);
+
+  const fetchGiudici = async () => {
+    try {
+      const { data, error } = await supabase.from('giudici').select('*').order('nome');
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Errore fetch giudici:', err);
+      return [];
+    }
+  };
+
+  const fetchAzioniSerata = useCallback(async (serata) => {
+    if (!serata) return;
+    try {
+      const { data, error } = await supabase.rpc('get_azioni_serata', { p_serata: serata });
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setAzioniInputs(data.map(a => a.descrizione).concat(Array(10 - data.length).fill('')));
+      } else {
+        setAzioniInputs(Array(10).fill(''));
+      }
+    } catch (err) {
+      console.error('Errore fetch azioni serata:', err);
+    }
+  }, []);
+
+  const salvaAzioni = async () => {
+    const serata = serataConfig?.serata;
+    if (!serata) {
+      setFeedback({ type: 'error', text: 'Nessuna serata in corso. Impossibile salvare le azioni.' });
+      return;
+    }
+    setAzioniLoading(true);
+    setFeedback(null);
+    try {
+      const azioniValide = azioniInputs.filter(a => a.trim() !== '');
+      if (azioniValide.length !== 10) {
+        setFeedback({ type: 'error', text: 'Devi inserire esattamente 10 azioni.' });
+        return;
+      }
+      const { data, error } = await supabase.rpc('salva_azioni_serata', {
+        p_pin: pinSalvato,
+        p_serata: serata,
+        p_azioni: azioniValide,
+      });
+      if (error) throw error;
+      if (data?.success) {
+        setFeedback({ type: 'success', text: `10 azioni salvate per la Serata ${serata}.` });
+      } else {
+        setFeedback({ type: 'error', text: data?.error || 'Errore nel salvataggio.' });
+      }
+    } catch (err) {
+      console.error('Errore salvataggio azioni:', err);
+      setFeedback({ type: 'error', text: 'Errore di rete durante il salvataggio.' });
+    } finally {
+      setAzioniLoading(false);
+    }
+  };
+
+  const calcolaPunteggi = async () => {
+    const serata = serataConfig?.serata;
+    if (!serata) {
+      setFeedback({ type: 'error', text: 'Nessuna serata in corso.' });
+      return;
+    }
+    setCalcoloLoading(true);
+    setFeedback(null);
+    try {
+      // Filtra le scommesse della serata corrente
+      const scommesseSerata = scommesse.filter(s => s.num_serata === serata);
+      if (scommesseSerata.length === 0) {
+        setFeedback({ type: 'error', text: 'Nessuna scommessa trovata per questa serata.' });
+        return;
+      }
+
+      let count = 0;
+      for (const s of scommesseSerata) {
+        // Calcola punteggio per i 3 giudici scelti
+        let punteggio = 0;
+        for (const n of [1, 2, 3]) {
+          const gid = s[`giudice_${n}_id`];
+          if (gid == null) continue;
+          const azioni = Number(risultatiGiudici[gid]) || 0;
+          const giudice = giudiciList.find(g => g.id_giudice === gid);
+          const base = giudice?.punteggio_base || 0;
+          punteggio += azioni * base;
+        }
+
+        // Aggiorna nel DB
+        const { data, error } = await supabase.rpc('set_punteggio_scommessa', {
+          p_pin: pinSalvato,
+          p_scommessa_id: s.id_scommessa,
+          p_punteggio: punteggio,
+        });
+        if (error) throw error;
+        if (!data?.success) {
+          if (data?.error?.includes('PIN')) {
+            setIsAutenticato(false);
+            setPinSalvato('');
+          }
+          throw new Error(data?.error || 'Errore salvataggio punteggio');
+        }
+        count++;
+      }
+
+      // Aggiorna lo stato locale per mostrare subito i punteggi
+      setScommesse(prev => prev.map(s => {
+        if (s.num_serata !== serata) return s;
+        let punteggio = 0;
+        for (const n of [1, 2, 3]) {
+          const gid = s[`giudice_${n}_id`];
+          if (gid == null) continue;
+          const azioni = Number(risultatiGiudici[gid]) || 0;
+          const giudice = giudiciList.find(g => g.id_giudice === gid);
+          const base = giudice?.punteggio_base || 0;
+          punteggio += azioni * base;
+        }
+        return { ...s, punteggio_ottenuto: punteggio };
+      }));
+
+      setFeedback({
+        type: 'success',
+        text: `Punteggi calcolati! ${count} scommesse aggiornate per la Serata ${serata}.`,
+      });
+    } catch (err) {
+      console.error('Errore calcolo punteggi:', err);
+      setFeedback({ type: 'error', text: err.message || 'Errore di rete durante il calcolo.' });
+    } finally {
+      setCalcoloLoading(false);
+    }
+  };
 
   const fetchSerataConfig = useCallback(async () => {
     try {
@@ -245,73 +387,22 @@ const AreaStaff = () => {
     }
   }, [isAutenticato, fetchScommesse, fetchSerataConfig, fetchStatoSvelamento, fetchStatoClassificaPubblica]);
 
-  const validaScommessa = async (idScommessa, indovinata) => {
-    setActionLoading(prev => ({ ...prev, [idScommessa]: true }));
-    setFeedback(null);
-
-    try {
-      const { data, error } = await supabase.rpc('valida_scommessa', {
-        p_scommessa_id: idScommessa,
-        p_indovinata: indovinata,
-        p_pin: pinSalvato,
-      });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        setScommesse(prev => prev.map(s =>
-          s.id_scommessa === idScommessa
-            ? { ...s, indovinata, validata_il: new Date().toISOString() }
-            : s
-        ));
-        setFeedback({
-          type: 'success',
-          text: `Scommessa #${idScommessa} segnata come ${indovinata ? '✅ indovinata' : '❌ fallita'}.`,
-        });
-      } else {
-        if (data?.error?.includes('PIN')) {
-          setIsAutenticato(false);
-          setPinSalvato('');
-        }
-        setFeedback({ type: 'error', text: data?.error || 'Errore sconosciuto.' });
-      }
-    } catch (err) {
-      console.error('Errore validazione:', err);
-      setFeedback({ type: 'error', text: 'Errore di rete durante la validazione.' });
-    } finally {
-      setActionLoading(prev => ({ ...prev, [idScommessa]: false }));
+  useEffect(() => {
+    if (serataConfig?.serata) {
+      fetchAzioniSerata(serataConfig.serata);
     }
-  };
+  }, [serataConfig, fetchAzioniSerata]);
 
-  const resetScommessa = async (idScommessa) => {
-    setActionLoading(prev => ({ ...prev, [idScommessa]: true }));
-    setFeedback(null);
-
-    try {
-      const { data, error } = await supabase.rpc('reset_scommessa', {
-        p_scommessa_id: idScommessa,
-        p_pin: pinSalvato,
+  useEffect(() => {
+    if (isAutenticato) {
+      fetchGiudici().then(giudici => {
+        setGiudiciList(giudici);
+        const init = {};
+        giudici.forEach(g => { init[g.id_giudice] = ''; });
+        setRisultatiGiudici(init);
       });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        setScommesse(prev => prev.map(s =>
-          s.id_scommessa === idScommessa
-            ? { ...s, indovinata: null, validata_il: null }
-            : s
-        ));
-        setFeedback({ type: 'success', text: `Scommessa #${idScommessa} rimessa in attesa.` });
-      } else {
-        setFeedback({ type: 'error', text: data?.error || 'Errore nel reset.' });
-      }
-    } catch (err) {
-      console.error('Errore reset:', err);
-      setFeedback({ type: 'error', text: 'Errore di rete durante il reset.' });
-    } finally {
-      setActionLoading(prev => ({ ...prev, [idScommessa]: false }));
     }
-  };
+  }, [isAutenticato]);
 
   const handleLogout = () => {
     setIsAutenticato(false);
@@ -323,27 +414,15 @@ const AreaStaff = () => {
   };
 
   const scommesseFiltrate = scommesse.filter(s => {
-    if (filtroStato === 'in_attesa') return s.indovinata === null;
-    if (filtroStato === 'indovinata') return s.indovinata === true;
-    if (filtroStato === 'fallita') return s.indovinata === false;
+    if (filtroStato === 'in_attesa') return (s.punteggio_ottenuto || 0) === 0;
+    if (filtroStato === 'calcolate') return (s.punteggio_ottenuto || 0) > 0;
     return true;
   });
 
   const conteggi = {
     tutti: scommesse.length,
-    in_attesa: scommesse.filter(s => s.indovinata === null).length,
-    indovinata: scommesse.filter(s => s.indovinata === true).length,
-    fallita: scommesse.filter(s => s.indovinata === false).length,
-  };
-
-  const renderStatoBadge = (indovinata) => {
-    if (indovinata === null) {
-      return <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 border border-gray-200">⏳ In attesa</span>;
-    }
-    if (indovinata === true) {
-      return <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">✅ Indovinata</span>;
-    }
-    return <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">❌ Fallita</span>;
+    in_attesa: scommesse.filter(s => (s.punteggio_ottenuto || 0) === 0).length,
+    calcolate: scommesse.filter(s => (s.punteggio_ottenuto || 0) > 0).length,
   };
 
   if (!isAutenticato) {
@@ -633,12 +712,164 @@ const AreaStaff = () => {
           </div>
         </div>
 
+        {/* CONFIGURA 10 AZIONI DELLA SERATA */}
+        <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <ListChecks className="text-amber-400" size={20} />
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">
+              Configura 10 Azioni — Serata {serataConfig?.serata || '?'}
+            </h2>
+            <span className="ml-auto text-[10px] font-bold text-slate-500 uppercase">
+              {azioniInputs.filter(a => a.trim() !== '').length}/10
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">
+            Inserisci esattamente 10 azioni che i giudici potranno compiere durante la serata.
+            I capitani le vedranno in sola lettura.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {azioniInputs.map((val, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-600 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">
+                  {idx + 1}
+                </span>
+                <input
+                  type="text"
+                  value={val}
+                  onChange={(e) => {
+                    const next = [...azioniInputs];
+                    next[idx] = e.target.value;
+                    setAzioniInputs(next);
+                  }}
+                  placeholder={`Azione ${idx + 1}...`}
+                  className="flex-1 p-2.5 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all placeholder:text-slate-600"
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={salvaAzioni}
+            disabled={azioniLoading || !serataConfig?.serata}
+            className="mt-4 w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-black rounded-xl text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {azioniLoading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+            Salva 10 Azioni
+          </button>
+        </div>
+
+        {/* PUNTEGGI BASE GIUDICI */}
+        <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="text-amber-400" size={20} />
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">
+              Punteggi Base Giudici
+            </h2>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">
+            Imposta il punteggio base di ogni giudice (moltiplicatore per le azioni compiute). Es: +5 = ogni azione del giudice vale 5 pt per la squadra.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {giudiciList.map(g => (
+              <div key={g.id_giudice} className="flex items-center gap-2 bg-slate-900/50 rounded-xl px-3 py-2.5 border border-slate-700">
+                <span className="text-sm font-bold text-slate-200 truncate flex-1">{g.nome}</span>
+                <input
+                  type="number"
+                  defaultValue={g.punteggio_base || 0}
+                  onBlur={async (e) => {
+                    const val = Number(e.target.value);
+                    if (isNaN(val)) return;
+                    try {
+                      const { data, error } = await supabase.rpc('salva_punteggio_giudice', {
+                        p_pin: pinSalvato,
+                        p_giudice_id: g.id_giudice,
+                        p_punteggio: val,
+                      });
+                      if (error) throw error;
+                      if (data?.success) {
+                        setGiudiciList(prev =>
+                          prev.map(x => x.id_giudice === g.id_giudice ? { ...x, punteggio_base: val } : x)
+                        );
+                        setFeedback({ type: 'success', text: `${data.nome}: punteggio base = ${val > 0 ? '+' : ''}${val}` });
+                      }
+                    } catch (err) {
+                      console.error('Errore salvataggio punteggio:', err);
+                    }
+                  }}
+                  className="w-20 p-2 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold text-center focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all"
+                />
+                <span className="text-[10px] font-bold text-slate-500">pt/az</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CALCOLO RISULTATI GIUDICI */}
+        <div className="mb-6 bg-slate-800 border border-slate-700 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Calculator className="text-amber-400" size={20} />
+            <h2 className="text-sm font-black text-white uppercase tracking-wider">
+              Calcolo Risultati — Serata {serataConfig?.serata || '?'}
+            </h2>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">
+            Per ogni giudice, indica quante delle 10 azioni ha effettivamente compiuto durante la serata.
+            Poi clicca "Calcola" per assegnare i punteggi alle squadre.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.keys(risultatiGiudici).map(gid => {
+              const giudice = giudiciList.find(g => String(g.id_giudice) === String(gid));
+              const nomeGiudice = giudice?.nome || gid;
+              const puntiBase = giudice?.punteggio_base || 0;
+              return (
+              <div key={gid} className="flex items-center gap-2 bg-slate-900/50 rounded-xl px-3 py-2.5 border border-slate-700">
+                <Users size={14} className="text-amber-400 shrink-0" />
+                <span className="text-sm font-bold text-slate-200 truncate flex-1">
+                  {nomeGiudice}
+                  {puntiBase !== 0 && (
+                    <span className="text-slate-500 text-[10px] ml-1">({puntiBase > 0 ? '+' : ''}{puntiBase} pt)</span>
+                  )}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={risultatiGiudici[gid]}
+                  onChange={(e) =>
+                    setRisultatiGiudici(prev => ({ ...prev, [gid]: e.target.value }))
+                  }
+                  className="w-16 p-2 bg-slate-900 border-2 border-slate-600 rounded-xl text-white font-bold text-center focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all"
+                />
+                <span className="text-[10px] font-bold text-slate-500">/10</span>
+              </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={calcolaPunteggi}
+            disabled={calcoloLoading || !serataConfig?.serata}
+            className="mt-4 w-full py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-900 font-black rounded-xl text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
+          >
+            {calcoloLoading ? <Loader2 className="animate-spin" size={20} /> : <Calculator size={20} />}
+            Calcola e Assegna Punteggi
+          </button>
+        </div>
+
+        {/* SCOMMESSE DEI CAPITANI */}
+        <div className="border-t-2 border-slate-700 pt-5 mb-4">
+          <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2 mb-1">
+            <Users size={18} className="text-amber-400" />
+            Scommesse dei Capitani
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Stato delle scommesse piazzate. Il punteggio viene calcolato dalla regia con il pannello "Calcolo Risultati" qui sopra.
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-2 mb-6">
           {[
             { key: 'tutti', label: 'Tutte', color: 'bg-slate-700 text-slate-300' },
-            { key: 'in_attesa', label: '⏳ In attesa', color: 'bg-gray-700 text-gray-300' },
-            { key: 'indovinata', label: '✅ Indovinate', color: 'bg-green-900/50 text-green-400' },
-            { key: 'fallita', label: '❌ Fallite', color: 'bg-red-900/50 text-red-400' },
+            { key: 'in_attesa', label: '⏳ In attesa calcolo', color: 'bg-gray-700 text-gray-300' },
+            { key: 'calcolate', label: '📊 Calcolate', color: 'bg-green-900/50 text-green-400' },
           ].map(f => (
             <button
               key={f.key}
@@ -670,11 +901,9 @@ const AreaStaff = () => {
               <thead>
                 <tr className="bg-slate-800 text-left">
                   <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Squadra</th>
-                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Giudice</th>
-                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Azione</th>
-                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Punti</th>
-                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Stato</th>
-                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Azioni</th>
+                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Giudici scelti</th>
+                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Punteggio</th>
+                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Serata</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -683,50 +912,37 @@ const AreaStaff = () => {
                     <td className="px-4 py-3">
                       <span className="font-bold text-white">{s.nome_squadra}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{s.nome_giudice}</td>
-                    <td className="px-4 py-3 max-w-[250px]">
-                      <span className="text-slate-300 italic truncate block">"{s.azione_scelta}"</span>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {[1, 2, 3].map(n => {
+                          const nome = s[`giudice_${n}_nome`];
+                          const punti = s[`giudice_${n}_punti`];
+                          if (!nome || nome === '—') return null;
+                          return (
+                            <span key={n} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-blue-900/30 text-blue-300 border border-blue-800/40">
+                              {nome}
+                              <span className="text-blue-500 text-[10px]">({punti > 0 ? '+' : ''}{punti || 0})</span>
+                            </span>
+                          );
+                        })}
+                        {(!s.giudice_1_nome || s.giudice_1_nome === '—') && (
+                          <span className="text-xs text-slate-500 italic">—</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`font-bold ${s.punti >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {s.punti >= 0 ? '+' : ''}{s.punti}
+                      <span className={`inline-flex items-center gap-1 font-black text-sm px-2 py-1 rounded-lg ${
+                        (s.punteggio_ottenuto || 0) > 0
+                          ? 'bg-green-500/15 text-green-300'
+                          : 'bg-gray-700/30 text-gray-500'
+                      }`}>
+                        {(s.punteggio_ottenuto || 0) > 0 ? '+' : ''}{s.punteggio_ottenuto || 0} pt
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {renderStatoBadge(s.indovinata)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {actionLoading[s.id_scommessa] ? (
-                        <Loader2 className="animate-spin text-amber-400 mx-auto" size={20} />
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => validaScommessa(s.id_scommessa, true)}
-                            disabled={s.indovinata === true}
-                            className="p-1.5 rounded-lg bg-green-600/20 hover:bg-green-600/40 text-green-400 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-                            title="Segna come indovinata"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => validaScommessa(s.id_scommessa, false)}
-                            disabled={s.indovinata === false}
-                            className="p-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-                            title="Segna come fallita"
-                          >
-                            <XCircle size={16} />
-                          </button>
-                          {s.indovinata !== null && (
-                            <button
-                              onClick={() => resetScommessa(s.id_scommessa)}
-                              className="p-1.5 rounded-lg bg-slate-600/30 hover:bg-slate-600/60 text-slate-400 hover:text-white transition-colors"
-                              title="Rimetti in attesa"
-                            >
-                              <RotateCcw size={14} />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 border border-slate-600 text-white font-black text-sm">
+                        {s.num_serata}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -737,7 +953,7 @@ const AreaStaff = () => {
 
         <div className="mt-6 text-center text-slate-600 text-xs">
           {scommesse.length > 0 && (
-            <p>Totale: {conteggi.tutti} scommesse — {conteggi.in_attesa} in attesa, {conteggi.indovinata} indovinate, {conteggi.fallita} fallite</p>
+            <p>Totale: {conteggi.tutti} scommesse — {conteggi.in_attesa} in attesa di calcolo, {conteggi.calcolate} calcolate</p>
           )}
         </div>
       </main>

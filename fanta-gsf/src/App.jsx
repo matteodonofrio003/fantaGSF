@@ -64,7 +64,6 @@ export default function App() {
   const [giudiciDb, setGiudiciDb] = useState([]);
   const [squadreDisponibili, setSquadreDisponibili] = useState([]);
   const [calendarioSerate, setCalendarioSerate] = useState([]);
-  const [bonusMalusList, setBonusMalusList] = useState([]);
   const [isLoadingDb, setIsLoadingDb] = useState(true);
 
   // Stato Step 1 — ID della squadra selezionata dalla tendina
@@ -75,6 +74,9 @@ export default function App() {
 
   // Stato principale: la scommessa che il capitano sta piazzando (array di 1)
   const [scommesse, setScommesse] = useState([]);
+
+  // Credenziale del capitano (PIN-OTP o password) — serve per piazza_scommessa RPC
+  const [credenziale, setCredenziale] = useState('');
 
   // --- SERATA IN CORSO + DASHBOARD ---
   // serataCorrente: numero serata aperta (1-5) o null se nessuna.
@@ -107,22 +109,19 @@ export default function App() {
     const fetchData = async () => {
       setIsLoadingDb(true);
       try {
-        const [resGiudici, resSquadre, resSerate, resBonusMalus] = await Promise.all([
+        const [resGiudici, resSquadre, resSerate] = await Promise.all([
           supabase.from('giudici').select('*'),
           supabase.from('squadre').select('*'),
           supabase.from('catalogo_serate_giochi').select('*').order('num_serata').order('ordine'),
-          supabase.from('catalogo_bonus_malus').select('*').eq('attivo', true).order('id'),
         ]);
 
         if (resGiudici.error) throw resGiudici.error;
         if (resSquadre.error) throw resSquadre.error;
         if (resSerate.error) throw resSerate.error;
-        if (resBonusMalus.error) throw resBonusMalus.error;
 
         setGiudiciDb(resGiudici.data || []);
         setSquadreDisponibili(resSquadre.data || []);
         setCalendarioSerate(raggruppaPerSerata(resSerate.data));
-        setBonusMalusList(resBonusMalus.data || []);
       } catch (err) {
         console.error("Errore nel fetch dati Supabase:", err);
       } finally {
@@ -169,6 +168,7 @@ export default function App() {
     setSelectedSquadra('');
     setScommesse([]);
     setSubmitMessage(null);
+    setCredenziale('');
   };
 
   // Dopo il salvataggio: vai alla Dashboard (che ora include la scommessa appena fatta)
@@ -181,48 +181,50 @@ export default function App() {
   // Inserisce LA scommessa della serata in corso su `scommesse_del_capitano`.
   // Il vincolo UNIQUE(squadra_id, num_serata) garantisce 1 scommessa/serata.
   const handleFinalSubmit = async () => {
-    // Guard: niente scommessa compilata → non inviare un payload vuoto
     if (scommesse.length === 0) {
       setSubmitMessage({ type: 'error', text: 'Completa prima la scommessa della serata.' });
       return;
     }
 
+    const s = scommesse[0];
+
     setIsSubmitting(true);
     setSubmitMessage(null);
 
     try {
-      const payloadArray = scommesse.map(s => ({
-        squadra_id: Number(selectedSquadra), // forziamo a numero per coerenza con la FK BIGINT
-        giudice_id: s.giudice_id,
-        azione_scelta: s.azione,
-        punti: s.punti,
-        num_serata: s.num_serata,             // serata in corso (1-5)
-      }));
-
-      console.log('PAYLOAD PER SUPABASE:', payloadArray);
-
-      // NB: nessun .select() dopo l'insert. Con la lettura blindata (niente policy
-      // SELECT) un INSERT ... RETURNING verrebbe negato dalla RLS. L'insert "puro"
-      // richiede solo la policy anon_insert_scommesse.
-      const { error } = await supabase
-        .from('scommesse_del_capitano')
-        .insert(payloadArray);
-
-      console.log('RISPOSTA SUPABASE:', { error });
+      const { data, error } = await supabase.rpc('piazza_scommessa', {
+        p_squadra_id: Number(selectedSquadra),
+        p_secret: credenziale,
+        p_serata: s.num_serata,
+        p_g1: s.giudice_1_id,
+        p_g2: s.giudice_2_id,
+        p_g3: s.giudice_3_id,
+      });
 
       if (error) throw error;
 
-      // Aggiorna lo storico per la dashboard dai dati locali (non rileggiamo dal DB).
-      const nuoveDashboard = scommesse.map((s) => ({
+      if (!data?.success) {
+        setSubmitMessage({ type: 'error', text: data?.error || 'Errore durante il salvataggio.' });
+        return;
+      }
+
+      const nuovaDashboard = {
         id_scommessa: `nuova-${s.num_serata}`,
         num_serata: s.num_serata,
-        azione_scelta: s.azione,
-        punti: s.punti,
-        indovinata: null,
-        nome_giudice: s.nomeGiudice,
-      }));
+        giudice_1_id: s.giudice_1_id,
+        giudice_2_id: s.giudice_2_id,
+        giudice_3_id: s.giudice_3_id,
+        giudice_1_nome: s.giudice_1_nome,
+        giudice_2_nome: s.giudice_2_nome,
+        giudice_3_nome: s.giudice_3_nome,
+        giudice_1_punti: s.giudice_1_punti,
+        giudice_2_punti: s.giudice_2_punti,
+        giudice_3_punti: s.giudice_3_punti,
+        punteggio_ottenuto: 0,
+      };
+
       setScommesseGiaEffettuate(prev =>
-        [...prev, ...nuoveDashboard].sort((a, b) => a.num_serata - b.num_serata)
+        [...prev, nuovaDashboard].sort((a, b) => a.num_serata - b.num_serata)
       );
 
       setSubmitMessage({
@@ -232,11 +234,7 @@ export default function App() {
       setStepAttuale(5);
     } catch (err) {
       console.error('Errore salvataggio su Supabase:', err);
-      // 23505 = violazione del vincolo UNIQUE (scommessa già presente per la serata)
-      const messaggio = err.code === '23505'
-        ? 'Hai già piazzato la scommessa per questa serata. Ricarica la pagina.'
-        : (err.message || 'Errore durante il salvataggio. Riprova.');
-      setSubmitMessage({ type: 'error', text: messaggio });
+      setSubmitMessage({ type: 'error', text: err.message || 'Errore durante il salvataggio. Riprova.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -396,6 +394,7 @@ export default function App() {
                       setSerataCorrente={setSerataCorrente}
                       setMostraDashboard={setMostraDashboard}
                       setScommesseGiaEffettuate={setScommesseGiaEffettuate}
+                      setCredenziale={setCredenziale}
                     />
                   )}
 
@@ -413,8 +412,6 @@ export default function App() {
                   {stepAttuale === 3 && (
                     <Step3Scommesse
                       giudiciDb={giudiciDb}
-                      bonusMalusList={bonusMalusList}
-                      calendarioSerate={calendarioSerate}
                       serataCorrente={serataCorrente}
                       isLoadingDb={isLoadingDb}
                       scommesse={scommesse}
