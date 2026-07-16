@@ -1023,6 +1023,7 @@ const AreaStaff = () => {
                   <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Giudici scelti</th>
                   <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Punteggio</th>
                   <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Serata</th>
+                  <th className="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Piazzata il</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -1062,6 +1063,11 @@ const AreaStaff = () => {
                       <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 border border-slate-600 text-white font-black text-sm">
                         {s.num_serata}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                      {s.piazzata_il
+                        ? new Date(s.piazzata_il).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Rome' })
+                        : '—'}
                     </td>
                   </tr>
                 ))}
