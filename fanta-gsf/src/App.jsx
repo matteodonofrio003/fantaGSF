@@ -131,6 +131,25 @@ export default function App() {
     fetchData();
   }, []);
 
+  // Se l'ID squadra selezionato non corrisponde a nessuna squadra nel DB,
+  // forza il reset (es. dopo un DELETE/INSERT che ha cambiato gli ID)
+  useEffect(() => {
+    if (selectedSquadra && squadreDisponibili.length > 0 && !isLoadingDb) {
+      const found = squadreDisponibili.find(s => String(s.id_squadra) === String(selectedSquadra));
+      if (!found) {
+        setStepAttuale(1);
+        setIsCapitanoAutenticato(false);
+        setMostraDashboard(false);
+        setSerataCorrente(null);
+        setScommesseGiaEffettuate([]);
+        setSelectedSquadra('');
+        setScommesse([]);
+        setSubmitMessage(null);
+        setCredenziale('');
+      }
+    }
+  }, [selectedSquadra, squadreDisponibili, isLoadingDb]);
+
   // ✅ Early return DOPO tutti gli hook (useState, useEffect)
   // Se siamo nella route staff, rendiamo SOLO il pannello protetto
   if (currentRoute === '#/staff') {
@@ -234,7 +253,12 @@ export default function App() {
       setStepAttuale(5);
     } catch (err) {
       console.error('Errore salvataggio su Supabase:', err);
-      setSubmitMessage({ type: 'error', text: err.message || 'Errore durante il salvataggio. Riprova.' });
+      if (err.code === '23503') {
+        setSubmitMessage({ type: 'error', text: 'Sessione scaduta. Il DB è stato aggiornato. Ricarica la pagina e riprova.' });
+        setTimeout(() => handleCambiaSquadra(), 3000);
+      } else {
+        setSubmitMessage({ type: 'error', text: err.message || 'Errore durante il salvataggio. Riprova.' });
+      }
     } finally {
       setIsSubmitting(false);
     }
