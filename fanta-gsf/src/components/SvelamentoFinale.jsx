@@ -5,9 +5,6 @@ import {
   Eye,
   Trophy,
   Sparkles,
-  CheckCircle2,
-  XCircle,
-  Clock,
   Loader2,
   ArrowLeft,
   RefreshCw,
@@ -17,56 +14,47 @@ import {
   Flame,
 } from 'lucide-react';
 
-/**
- * @typedef {Object} ScommessaSvelata
- * @property {number}      id_scommessa
- * @property {number}      squadra_id
- * @property {string}      nome_squadra
- * @property {string|null} colore
- * @property {number}      num_serata
- * @property {string}      giudice_id
- * @property {string}      nome_giudice
- * @property {string}      azione_scelta
- * @property {number}      punti          // bonus (+) / malus (-)
- * @property {boolean|null} indovinata    // null = in attesa, true = indovinata, false = fallita
- */
-
 const fmtPunti = (n) => `${n > 0 ? '+' : ''}${n}`;
 
-// Badge esito (indovinata / fallita / in attesa) con icona e colori "drammatici"
-const EsitoBadge = ({ indovinata }) => {
-  if (indovinata === true) {
+const StatoBadge = ({ calcolato }) => {
+  if (calcolato) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
-        <CheckCircle2 size={13} /> Indovinata
-      </span>
-    );
-  }
-  if (indovinata === false) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/40">
-        <XCircle size={13} /> Fallita
+        <Sparkles size={13} /> Calcolato
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-500/20 text-slate-300 border border-slate-400/30">
-      <Clock size={13} /> In attesa
+      <Flame size={13} /> In attesa
     </span>
   );
 };
 
-// Singola carta scommessa: rilievo, bordo marcato, hover che la "solleva"
-const ScommessaCard = ({ s, mostraSquadra }) => {
-  const isWin = s.indovinata === true;
-  const isLose = s.indovinata === false;
+const GiudiciScelti = ({ s }) => (
+  <div className="flex flex-wrap gap-1 mt-1">
+    {[1, 2, 3].map(n => {
+      const nome = s[`giudice_${n}_nome`];
+      const punti = s[`giudice_${n}_punti`];
+      if (!nome || nome === '—') return null;
+      return (
+        <span
+          key={n}
+          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-300 border border-blue-800/40"
+        >
+          {nome}
+          <span className="text-blue-500">({punti > 0 ? '+' : ''}{punti || 0})</span>
+        </span>
+      );
+    })}
+  </div>
+);
 
-  // Bordo/aura che cambia col destino della scommessa
-  const aura = isWin
+const ScommessaCard = ({ s, mostraSquadra }) => {
+  const isCalcolata = (s.punteggio_ottenuto || 0) > 0;
+  const aura = isCalcolata
     ? 'border-emerald-400/40 hover:border-emerald-300/70 hover:shadow-emerald-500/20'
-    : isLose
-      ? 'border-rose-400/40 hover:border-rose-300/70 hover:shadow-rose-500/20'
-      : 'border-white/10 hover:border-amber-300/50 hover:shadow-amber-500/10';
+    : 'border-white/10 hover:border-amber-300/50 hover:shadow-amber-500/10';
 
   return (
     <div
@@ -89,27 +77,26 @@ const ScommessaCard = ({ s, mostraSquadra }) => {
             </span>
           )}
         </div>
-        <EsitoBadge indovinata={s.indovinata} />
+        <StatoBadge calcolato={isCalcolata} />
       </div>
 
-      <p className="text-sm text-slate-300 leading-snug">
-        <span className="text-amber-300/80 font-bold">{s.nome_giudice}</span>
-        <span className="text-slate-500"> — </span>
-        <span className="italic text-slate-100">"{s.azione_scelta}"</span>
-      </p>
+      <div className="flex items-center gap-1.5 mb-2 text-white/70">
+        <Users size={12} />
+        <GiudiciScelti s={s} />
+      </div>
 
       <div className="mt-3 flex items-center justify-between">
         <span
           className={`inline-flex items-center gap-1 text-base font-black px-3 py-1 rounded-xl ${
-            s.punti >= 0
+            isCalcolata
               ? 'bg-emerald-500/15 text-emerald-300'
-              : 'bg-rose-500/15 text-rose-300'
+              : 'bg-gray-500/15 text-gray-500'
           }`}
         >
           <Flame size={14} className="opacity-70" />
-          {fmtPunti(s.punti)} <span className="text-xs font-bold opacity-70">pt</span>
+          {fmtPunti(s.punteggio_ottenuto || 0)} <span className="text-xs font-bold opacity-70">pt</span>
         </span>
-        {isWin && (
+        {isCalcolata && (
           <Sparkles className="text-amber-300 opacity-0 group-hover:opacity-100 transition-opacity" size={18} />
         )}
       </div>
@@ -118,17 +105,15 @@ const ScommessaCard = ({ s, mostraSquadra }) => {
 };
 
 const SvelamentoFinale = () => {
-  /** @type {[ScommessaSvelata[], Function]} */
   const [scommesse, setScommesse] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [erroreRete, setErroreRete] = useState(false);
-  const [raggruppamento, setRaggruppamento] = useState('squadra'); // 'squadra' | 'serata'
+  const [raggruppamento, setRaggruppamento] = useState('squadra');
 
   const fetchSvelamento = useCallback(async () => {
     setIsLoading(true);
     setErroreRete(false);
     try {
-      // La RPC fa da cancello: se la regia non ha sbloccato, torna [] (array vuoto).
       const { data, error } = await supabase.rpc('get_scommesse_svelamento');
       if (error) throw error;
       setScommesse(Array.isArray(data) ? data : []);
@@ -145,10 +130,8 @@ const SvelamentoFinale = () => {
     fetchSvelamento();
   }, [fetchSvelamento]);
 
-  // Svelamento "attivo" = la regia ha sbloccato e ci sono dati da mostrare.
   const attivo = scommesse.length > 0;
 
-  // Raggruppamento per Squadra: { id, nome, colore, totale, vinte, bets[] }
   const gruppiSquadra = useMemo(() => {
     const mappa = new Map();
     for (const s of scommesse) {
@@ -164,18 +147,14 @@ const SvelamentoFinale = () => {
       }
       const g = mappa.get(s.squadra_id);
       g.bets.push(s);
-      if (s.indovinata === true) {
-        g.totale += s.punti;
-        g.vinte += 1;
-      }
+      g.totale += (s.punteggio_ottenuto || 0);
+      if ((s.punteggio_ottenuto || 0) > 0) g.vinte += 1;
     }
-    // Ordina le squadre per punteggio totale (gran finale → leaderboard drammatica)
     return Array.from(mappa.values())
       .map((g) => ({ ...g, bets: g.bets.slice().sort((a, b) => a.num_serata - b.num_serata) }))
       .sort((a, b) => b.totale - a.totale || a.nome.localeCompare(b.nome));
   }, [scommesse]);
 
-  // Raggruppamento per Serata: { serata, bets[] }
   const gruppiSerata = useMemo(() => {
     const mappa = new Map();
     for (const s of scommesse) {
@@ -187,7 +166,6 @@ const SvelamentoFinale = () => {
       .sort((a, b) => a.serata - b.serata);
   }, [scommesse]);
 
-  // ─────────────────────────── STATO: CARICAMENTO ───────────────────────────
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
@@ -197,18 +175,15 @@ const SvelamentoFinale = () => {
     );
   }
 
-  // ─────────────────────────── STATO: ATTESA (sigillato) ───────────────────────────
   if (!attivo) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-950 flex items-center justify-center px-4">
-        {/* Blob luminosi di sfondo */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-0">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl bg-indigo-600/20 animate-pulse" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl bg-purple-600/20 animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
 
         <div className="relative z-10 text-center max-w-lg">
-          {/* Lucchetto gigante con aura pulsante */}
           <div className="relative mx-auto mb-10 w-40 h-40 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-amber-500/10 animate-ping" />
             <div className="absolute inset-2 rounded-full bg-amber-500/10 animate-pulse" />
@@ -217,7 +192,6 @@ const SvelamentoFinale = () => {
             </div>
           </div>
 
-          {/* Finto terminale */}
           <div className="inline-block text-left bg-black/40 border border-white/10 rounded-2xl px-6 py-4 font-mono text-sm shadow-xl backdrop-blur-sm">
             <p className="text-emerald-400">&gt; status: <span className="text-rose-400">SEALED</span></p>
             <p className="text-slate-400">
@@ -259,20 +233,17 @@ const SvelamentoFinale = () => {
     );
   }
 
-  // ─────────────────────────── STATO: ATTIVO (gran finale) ───────────────────────────
   const totaleScommesse = scommesse.length;
-  const totaleIndovinate = scommesse.filter((s) => s.indovinata === true).length;
+  const totaleCalcolate = scommesse.filter((s) => (s.punteggio_ottenuto || 0) > 0).length;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-950 via-indigo-950 to-purple-950 text-white">
-      {/* Sfondo: blob jewel-tone */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-0">
         <div className="absolute -top-24 -left-24 w-[28rem] h-[28rem] rounded-full blur-3xl bg-fuchsia-600/20" />
         <div className="absolute top-1/3 -right-24 w-[28rem] h-[28rem] rounded-full blur-3xl bg-amber-500/15" />
         <div className="absolute bottom-0 left-1/3 w-[28rem] h-[28rem] rounded-full blur-3xl bg-indigo-600/20" />
       </div>
 
-      {/* HEADER EPICO */}
       <header className="relative z-10 sticky top-0 backdrop-blur-md bg-slate-950/60 border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 h-20 flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-900/50 shrink-0">
@@ -297,7 +268,6 @@ const SvelamentoFinale = () => {
           <a
             href="#/"
             className="ml-auto shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 font-bold text-sm transition-all"
-            title="Torna alla Home"
           >
             <ArrowLeft size={18} />
             <span className="hidden sm:inline">Home</span>
@@ -306,7 +276,6 @@ const SvelamentoFinale = () => {
       </header>
 
       <main className="relative z-10 max-w-6xl mx-auto px-4 py-8">
-        {/* Riepilogo + toggle raggruppamento */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8">
           <div className="flex items-center gap-3">
             <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 shadow-lg">
@@ -314,12 +283,11 @@ const SvelamentoFinale = () => {
               <p className="text-2xl font-black text-white leading-none mt-1">{totaleScommesse}</p>
             </div>
             <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 shadow-lg">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Indovinate</p>
-              <p className="text-2xl font-black text-emerald-300 leading-none mt-1">{totaleIndovinate}</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Calcolate</p>
+              <p className="text-2xl font-black text-emerald-300 leading-none mt-1">{totaleCalcolate}</p>
             </div>
           </div>
 
-          {/* Switch raggruppamento */}
           <div className="sm:ml-auto inline-flex p-1 rounded-2xl bg-white/5 border border-white/10">
             {[
               { key: 'squadra', label: 'Per Squadra', icon: Users },
@@ -340,7 +308,6 @@ const SvelamentoFinale = () => {
           </div>
         </div>
 
-        {/* ===== RAGGRUPPATO PER SQUADRA ===== */}
         {raggruppamento === 'squadra' && (
           <div className="space-y-6">
             {gruppiSquadra.map((g, idx) => (
@@ -362,7 +329,7 @@ const SvelamentoFinale = () => {
                   )}
                   <h2 className="font-black text-lg sm:text-xl text-white truncate">{g.nome}</h2>
                   <div className="ml-auto flex items-center gap-3 shrink-0">
-                    <span className="text-xs font-bold text-slate-400">{g.vinte}✅ / {g.bets.length}</span>
+                    <span className="text-xs font-bold text-slate-400">{g.vinte} calcolate / {g.bets.length}</span>
                     <span
                       className={`inline-flex items-center gap-1 text-base font-black px-3 py-1.5 rounded-xl ${
                         g.totale >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
@@ -383,7 +350,6 @@ const SvelamentoFinale = () => {
           </div>
         )}
 
-        {/* ===== RAGGRUPPATO PER SERATA ===== */}
         {raggruppamento === 'serata' && (
           <div className="space-y-6">
             {gruppiSerata.map((g) => (
@@ -411,7 +377,6 @@ const SvelamentoFinale = () => {
           </div>
         )}
 
-        {/* Footer */}
         <div className="text-center mt-12 pb-4">
           <a
             href="#/"
